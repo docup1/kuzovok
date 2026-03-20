@@ -1,7 +1,9 @@
 # Кузовок - маршрутизация для shared-хостинга
+DirectoryIndex index.php
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /
+    RewriteBase /~s409784/kuzovok/
     
     # Если файл существует - отдаём его
     RewriteCond %{REQUEST_FILENAME} !-f
