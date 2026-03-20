@@ -12,7 +12,7 @@ GOOS ?= freebsd
 GOARCH ?= amd64
 CGO_ENABLED ?= 0
 
-.PHONY: all build clean fmt freebsd run run-backend run-proxy run-prod test
+.PHONY: all build clean deploy-prod fmt freebsd run run-backend run-proxy run-prod test
 
 all: build
 
@@ -44,6 +44,8 @@ run-prod:
 	-pkill -f '(^|[[:space:]])\./$(BINARY_NAME)([[:space:]]|$$)'
 	@echo "🚀 Запуск ./$(BINARY_NAME) в фоне, лог: $(BINARY_NAME).log"
 	nohup ./$(BINARY_NAME) > $(BINARY_NAME).log 2>&1 &
+
+deploy-prod: build run-prod
 
 freebsd:
 	@echo "🔨 Сборка под FreeBSD ($(GOARCH))..."
