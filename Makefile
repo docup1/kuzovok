@@ -4,8 +4,7 @@
 BINARY_NAME=kusovok
 GOOS=freebsd
 GOARCH=amd64
-CGO_ENABLED=1
-CC=cc
+CGO_ENABLED=0
 
 .PHONY: all build clean run freebsd
 
@@ -13,7 +12,7 @@ all: freebsd
 
 freebsd:
 	@echo "🔨 Сборка под FreeBSD (amd64)..."
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) CC=$(CC) go build -o $(BINARY_NAME) .
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) go build -o $(BINARY_NAME) .
 	@echo "✅ Готово: $(BINARY_NAME)"
 
 build:
