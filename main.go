@@ -782,6 +782,15 @@ func adminAllowedUserItemHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		updateAllowedUserRole(w, r, userID)
+	case http.MethodPost:
+		switch {
+		case len(parts) == 2 && parts[1] == "role":
+			updateAllowedUserRole(w, r, userID)
+		case len(parts) == 2 && parts[1] == "remove":
+			deleteAllowedUser(w, userID)
+		default:
+			writeError(w, http.StatusNotFound, "Маршрут не найден")
+		}
 	case http.MethodDelete:
 		if len(parts) != 1 {
 			writeError(w, http.StatusNotFound, "Маршрут не найден")

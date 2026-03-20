@@ -342,7 +342,7 @@ func TestAdminCanManageUsersAndLikes(t *testing.T) {
 		t.Fatalf("expected candidate to become admin, got %+v", promotedUser)
 	}
 
-	assertJSONStatus(t, adminClient, http.MethodDelete, server.URL+"/api/admin/allowed-users/"+strconv.FormatInt(candidateID, 10), nil, http.StatusConflict)
+	assertJSONStatus(t, adminClient, http.MethodPost, server.URL+"/api/admin/allowed-users/"+strconv.FormatInt(candidateID, 10)+"/remove", nil, http.StatusConflict)
 
 	demotedUser := updateAllowedRoleForTest(t, adminClient, server.URL, candidateID, roleUser)
 	if demotedUser.Role != string(roleUser) {
@@ -381,7 +381,7 @@ func TestAdminCannotDemoteLastAdmin(t *testing.T) {
 	status := requestJSONStatus(
 		t,
 		adminClient,
-		http.MethodPatch,
+		http.MethodPost,
 		server.URL+"/api/admin/allowed-users/"+strconv.FormatInt(soloID, 10)+"/role",
 		map[string]string{"role": string(roleUser)},
 		&response,
@@ -779,7 +779,7 @@ func updateAllowedRoleForTest(t *testing.T, client *http.Client, baseURL string,
 	requestJSON(
 		t,
 		client,
-		http.MethodPatch,
+		http.MethodPost,
 		baseURL+"/api/admin/allowed-users/"+strconv.FormatInt(userID, 10)+"/role",
 		map[string]string{"role": string(role)},
 		&response,
@@ -799,7 +799,7 @@ func deleteAllowedUserForTest(t *testing.T, client *http.Client, baseURL string,
 	t.Helper()
 
 	var response apiResponse
-	requestJSON(t, client, http.MethodDelete, baseURL+"/api/admin/allowed-users/"+strconv.FormatInt(userID, 10), nil, &response)
+	requestJSON(t, client, http.MethodPost, baseURL+"/api/admin/allowed-users/"+strconv.FormatInt(userID, 10)+"/remove", nil, &response)
 	if !response.Success {
 		t.Fatalf("delete allowed user failed: %s", response.Message)
 	}

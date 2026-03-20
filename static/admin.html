@@ -524,11 +524,11 @@
 
         async function changeRole(userId, role) {
             const label = role === ROLE_ADMIN ? "Пользователь повышен до admin" : "Администратор понижен до user";
-            await mutateAdminData(`/admin/allowed-users/${Number(userId)}/role`, "PATCH", { role }, label);
+            await mutateAdminData(`/admin/allowed-users/${Number(userId)}/role`, "POST", { role }, label);
         }
 
         async function removeAllowedUser(userId) {
-            await mutateAdminData(`/admin/allowed-users/${Number(userId)}`, "DELETE", null, "Доступ пользователя удалён");
+            await mutateAdminData(`/admin/allowed-users/${Number(userId)}/remove`, "POST", null, "Доступ пользователя удалён");
         }
 
         async function mutateAdminData(endpoint, method, payload, successMessage) {

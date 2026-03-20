@@ -41,7 +41,7 @@ run-proxy:
 
 run-prod:
 	@echo "🛑 Остановка запущенного ./$(BINARY_NAME), если он уже работает..."
-	-pkill -f '(^|[[:space:]])\./$(BINARY_NAME)([[:space:]]|$$)'
+	-pkill -x $(BINARY_NAME)
 	@echo "🚀 Запуск ./$(BINARY_NAME) в фоне, лог: $(BINARY_NAME).log"
 	nohup ./$(BINARY_NAME) > $(BINARY_NAME).log 2>&1 &
 
