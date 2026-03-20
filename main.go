@@ -52,7 +52,7 @@ type Response struct {
 
 func main() {
 	var err error
-	db, err = sql.Open("sqlite3", "./kusovok.db")
+	db, err = sql.Open("sqlite", "./kusovok.db")
 	if err != nil {
 		log.Fatal(err)
 	}
