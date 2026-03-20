@@ -28,6 +28,7 @@ const (
 	maxImageSize         = 10 << 20
 	maxMultipartBodySize = maxImageSize + (1 << 20)
 	cleanupInterval      = time.Minute
+	accessDeniedMessage  = "извините, вы пока не кузовок"
 )
 
 var (
@@ -64,6 +65,14 @@ type Post struct {
 	Liked          bool       `json:"liked"`
 	ImageURL       *string    `json:"image_url"`
 	ImageExpiresAt *time.Time `json:"image_expires_at"`
+}
+
+type MeResponse struct {
+	ID            int64  `json:"id"`
+	Username      string `json:"username"`
+	PostCount     int    `json:"post_count"`
+	IsAllowed     bool   `json:"is_allowed"`
+	AccessMessage string `json:"access_message"`
 }
 
 type Claims struct {
@@ -151,6 +160,7 @@ func initDB() error {
 		"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
 		"CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id))",
 		"CREATE TABLE IF NOT EXISTS likes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, post_id INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (post_id) REFERENCES posts(id), UNIQUE(user_id, post_id))",
+		"CREATE TABLE IF NOT EXISTS allowed_users (user_id INTEGER PRIMARY KEY, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)",
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
@@ -278,9 +288,9 @@ func newServerMux() http.Handler {
 	mux.HandleFunc("/api/login", loginHandler)
 	mux.HandleFunc("/api/logout", logoutHandler)
 	mux.HandleFunc("/api/me", authMiddleware(meHandler))
-	mux.HandleFunc("/api/posts", authMiddleware(postsHandler))
-	mux.HandleFunc("/api/feed", authMiddleware(feedHandler))
-	mux.HandleFunc("/api/like", authMiddleware(likeHandler))
+	mux.HandleFunc("/api/posts", authMiddleware(requireAllowedUser(postsHandler)))
+	mux.HandleFunc("/api/feed", authMiddleware(requireAllowedUser(feedHandler)))
+	mux.HandleFunc("/api/like", authMiddleware(requireAllowedUser(likeHandler)))
 	return mux
 }
 
@@ -394,6 +404,37 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func requireAllowedUser(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, err := strconv.ParseInt(r.Header.Get("X-User-ID"), 10, 64)
+		if err != nil || userID <= 0 {
+			writeError(w, http.StatusUnauthorized, "Требуется авторизация")
+			return
+		}
+
+		allowed, err := isUserAllowed(userID)
+		if err != nil {
+			log.Printf("Allowlist check error for user %d: %v", userID, err)
+			writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+			return
+		}
+		if !allowed {
+			writeError(w, http.StatusForbidden, accessDeniedMessage)
+			return
+		}
+
+		next(w, r)
+	}
+}
+
+func isUserAllowed(userID int64) (bool, error) {
+	var allowed int
+	if err := db.QueryRow("SELECT COUNT(*) FROM allowed_users WHERE user_id = ?", userID).Scan(&allowed); err != nil {
+		return false, err
+	}
+	return allowed > 0, nil
+}
+
 func registerHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "Метод не разрешен")
@@ -481,7 +522,24 @@ func meHandler(w http.ResponseWriter, r *http.Request) {
 	username := r.Header.Get("X-Username")
 	var postCount int
 	_ = db.QueryRow("SELECT COUNT(*) FROM posts WHERE user_id = ?", userID).Scan(&postCount)
-	writeSuccess(w, "", map[string]interface{}{"id": userID, "username": username, "post_count": postCount})
+
+	isAllowed, err := isUserAllowed(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+
+	response := MeResponse{
+		ID:        userID,
+		Username:  username,
+		PostCount: postCount,
+		IsAllowed: isAllowed,
+	}
+	if !isAllowed {
+		response.AccessMessage = accessDeniedMessage
+	}
+
+	writeSuccess(w, "", response)
 }
 
 func postsHandler(w http.ResponseWriter, r *http.Request) {

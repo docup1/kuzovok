@@ -57,6 +57,10 @@ func TestInitDBMigratesExistingPostsSchema(t *testing.T) {
 	if !columns["image_url"] || !columns["image_expires_at"] {
 		t.Fatalf("expected migrated posts columns, got %+v", columns)
 	}
+	allowedColumns := tableColumns(t, legacyDB, "allowed_users")
+	if !allowedColumns["user_id"] || !allowedColumns["created_at"] {
+		t.Fatalf("expected allowed_users table to be created, got %+v", allowedColumns)
+	}
 
 	if !hasIndex(t, legacyDB, "posts", "idx_posts_image_expires_at") {
 		t.Fatalf("expected idx_posts_image_expires_at to be created")
@@ -69,10 +73,18 @@ func TestRegisterCreatePostAndToggleLike(t *testing.T) {
 
 	alice := newSessionClient(t)
 	registerUser(t, alice, server.URL, "alice", "secret12")
+	allowUserByUsername(t, "alice")
+	if !fetchMe(t, alice, server.URL).IsAllowed {
+		t.Fatalf("expected alice to be allowed after allowlist insert")
+	}
 	post := createPostForTest(t, alice, server.URL, "Первый локальный пост")
 
 	bob := newSessionClient(t)
 	registerUser(t, bob, server.URL, "bob", "secret12")
+	allowUserByUsername(t, "bob")
+	if !fetchMe(t, bob, server.URL).IsAllowed {
+		t.Fatalf("expected bob to be allowed after allowlist insert")
+	}
 
 	firstLike := likePostForTest(t, bob, server.URL, post.ID)
 	if !firstLike.Liked || firstLike.Likes != 1 {
@@ -107,6 +119,7 @@ func TestCreatePostWithImageAndCleanup(t *testing.T) {
 
 	client := newSessionClient(t)
 	registerUser(t, client, server.URL, "nemo", "secret12")
+	allowUserByUsername(t, "nemo")
 
 	textOnly := createPostForTest(t, client, server.URL, "Только текст")
 	if textOnly.ImageURL != nil || textOnly.ImageExpiresAt != nil {
@@ -189,6 +202,7 @@ func TestCreatePostRejectsInvalidImage(t *testing.T) {
 
 	client := newSessionClient(t)
 	registerUser(t, client, server.URL, "dory", "secret12")
+	allowUserByUsername(t, "dory")
 
 	response := createMultipartPostExpectFailure(t, client, server.URL, "Невалидная картинка", "bad.txt", []byte("not an image"))
 	if !strings.Contains(response.Message, "Допустимы только") {
@@ -204,6 +218,7 @@ func TestCreatePostRejectsOversizedImage(t *testing.T) {
 
 	client := newSessionClient(t)
 	registerUser(t, client, server.URL, "marlin", "secret12")
+	allowUserByUsername(t, "marlin")
 
 	largeImage := bytes.Repeat([]byte("a"), maxImageSize+1024)
 	response := createMultipartPostExpectFailure(t, client, server.URL, "Слишком большая картинка", "huge.png", largeImage)
@@ -212,6 +227,32 @@ func TestCreatePostRejectsOversizedImage(t *testing.T) {
 	}
 
 	assertImageDirEmpty(t)
+}
+
+func TestUnallowedUserCannotUseProtectedAPI(t *testing.T) {
+	server := setupTestServer(t)
+	defer server.Close()
+
+	allowedAuthor := newSessionClient(t)
+	registerUser(t, allowedAuthor, server.URL, "allowed", "secret12")
+	allowUserByUsername(t, "allowed")
+	post := createPostForTest(t, allowedAuthor, server.URL, "Пост для проверки доступа")
+
+	blocked := newSessionClient(t)
+	registerUser(t, blocked, server.URL, "blocked", "secret12")
+
+	me := fetchMe(t, blocked, server.URL)
+	if me.IsAllowed {
+		t.Fatalf("expected blocked user to stay disallowed, got %+v", me)
+	}
+	if me.AccessMessage != accessDeniedMessage {
+		t.Fatalf("expected access denied message %q, got %q", accessDeniedMessage, me.AccessMessage)
+	}
+
+	assertForbiddenJSON(t, blocked, http.MethodGet, server.URL+"/api/feed", nil)
+	assertForbiddenJSON(t, blocked, http.MethodGet, server.URL+"/api/posts", nil)
+	assertForbiddenJSON(t, blocked, http.MethodPost, server.URL+"/api/posts", map[string]string{"content": "Не должен сохраниться"})
+	assertForbiddenJSON(t, blocked, http.MethodPost, server.URL+"/api/like", map[string]int64{"post_id": post.ID})
 }
 
 func setupTestServer(t *testing.T) *httptest.Server {
@@ -362,6 +403,12 @@ func fetchFeed(t *testing.T, client *http.Client, baseURL string) []Post {
 func requestJSON(t *testing.T, client *http.Client, method, url string, payload interface{}, target interface{}) {
 	t.Helper()
 
+	_ = requestJSONStatus(t, client, method, url, payload, target)
+}
+
+func requestJSONStatus(t *testing.T, client *http.Client, method, url string, payload interface{}, target interface{}) int {
+	t.Helper()
+
 	var body *bytes.Reader
 	if payload == nil {
 		body = bytes.NewReader(nil)
@@ -388,6 +435,7 @@ func requestJSON(t *testing.T, client *http.Client, method, url string, payload 
 	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	return resp.StatusCode
 }
 
 func requestMultipart(t *testing.T, client *http.Client, url, content, fileName string, data []byte) apiResponse {
@@ -450,6 +498,51 @@ func getBinary(t *testing.T, client *http.Client, url string) ([]byte, int) {
 		t.Fatalf("read binary response: %v", err)
 	}
 	return data, resp.StatusCode
+}
+
+func fetchMe(t *testing.T, client *http.Client, baseURL string) MeResponse {
+	t.Helper()
+
+	var response apiResponse
+	requestJSON(t, client, http.MethodGet, baseURL+"/api/me", nil, &response)
+	if !response.Success {
+		t.Fatalf("fetch me failed: %s", response.Message)
+	}
+
+	var me MeResponse
+	if err := json.Unmarshal(response.Data, &me); err != nil {
+		t.Fatalf("decode me response: %v", err)
+	}
+	return me
+}
+
+func allowUserByUsername(t *testing.T, username string) {
+	t.Helper()
+
+	var userID int64
+	if err := db.QueryRow("SELECT id FROM users WHERE username = ?", username).Scan(&userID); err != nil {
+		t.Fatalf("find user %s for allowlist: %v", username, err)
+	}
+
+	if _, err := db.Exec("INSERT INTO allowed_users (user_id) VALUES (?)", userID); err != nil {
+		t.Fatalf("allow user %s: %v", username, err)
+	}
+}
+
+func assertForbiddenJSON(t *testing.T, client *http.Client, method, url string, payload interface{}) {
+	t.Helper()
+
+	var response apiResponse
+	status := requestJSONStatus(t, client, method, url, payload, &response)
+	if status != http.StatusForbidden {
+		t.Fatalf("expected forbidden status for %s %s, got %d with response %+v", method, url, status, response)
+	}
+	if response.Success {
+		t.Fatalf("expected forbidden response to fail, got %+v", response)
+	}
+	if response.Message != accessDeniedMessage {
+		t.Fatalf("expected forbidden message %q, got %q", accessDeniedMessage, response.Message)
+	}
 }
 
 func tableColumns(t *testing.T, database *sql.DB, table string) map[string]bool {
