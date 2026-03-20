@@ -2,12 +2,18 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 type apiResponse struct {
@@ -19,6 +25,42 @@ type apiResponse struct {
 type likeResponse struct {
 	Likes int  `json:"likes"`
 	Liked bool `json:"liked"`
+}
+
+func TestInitDBMigratesExistingPostsSchema(t *testing.T) {
+	rootDir := t.TempDir()
+	legacyDB := openTestDB(t, filepath.Join(rootDir, "legacy.db"))
+	defer legacyDB.Close()
+
+	previousDB := db
+	db = legacyDB
+	t.Cleanup(func() {
+		db = previousDB
+	})
+
+	legacyStatements := []string{
+		"CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
+		"CREATE TABLE posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id))",
+		"CREATE TABLE likes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, post_id INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (post_id) REFERENCES posts(id), UNIQUE(user_id, post_id))",
+	}
+	for _, statement := range legacyStatements {
+		if _, err := legacyDB.Exec(statement); err != nil {
+			t.Fatalf("prepare legacy schema: %v", err)
+		}
+	}
+
+	if err := initDB(); err != nil {
+		t.Fatalf("init db migration: %v", err)
+	}
+
+	columns := tableColumns(t, legacyDB, "posts")
+	if !columns["image_url"] || !columns["image_expires_at"] {
+		t.Fatalf("expected migrated posts columns, got %+v", columns)
+	}
+
+	if !hasIndex(t, legacyDB, "posts", "idx_posts_image_expires_at") {
+		t.Fatalf("expected idx_posts_image_expires_at to be created")
+	}
 }
 
 func TestRegisterCreatePostAndToggleLike(t *testing.T) {
@@ -59,32 +101,161 @@ func TestRegisterCreatePostAndToggleLike(t *testing.T) {
 	}
 }
 
+func TestCreatePostWithImageAndCleanup(t *testing.T) {
+	server := setupTestServer(t)
+	defer server.Close()
+
+	client := newSessionClient(t)
+	registerUser(t, client, server.URL, "nemo", "secret12")
+
+	textOnly := createPostForTest(t, client, server.URL, "Только текст")
+	if textOnly.ImageURL != nil || textOnly.ImageExpiresAt != nil {
+		t.Fatalf("expected text-only post to have no image metadata, got %+v", textOnly)
+	}
+
+	imagePost := createMultipartPostForTest(t, client, server.URL, "Пост с картинкой", "reef.png", pngFixture())
+	if imagePost.ImageURL == nil || imagePost.ImageExpiresAt == nil {
+		t.Fatalf("expected post image metadata, got %+v", imagePost)
+	}
+
+	imageOnlyPost := createMultipartPostForTest(t, client, server.URL, "", "coral.png", pngFixture())
+	if imageOnlyPost.Content != "" {
+		t.Fatalf("expected image-only post to keep empty content, got %q", imageOnlyPost.Content)
+	}
+	if imageOnlyPost.ImageURL == nil || imageOnlyPost.ImageExpiresAt == nil {
+		t.Fatalf("expected image-only post image metadata, got %+v", imageOnlyPost)
+	}
+
+	imageBody, status := getBinary(t, client, server.URL+*imagePost.ImageURL)
+	if status != http.StatusOK {
+		t.Fatalf("expected uploaded image to be served, got status %d", status)
+	}
+	if !bytes.Equal(imageBody, pngFixture()) {
+		t.Fatalf("unexpected image body returned by server")
+	}
+
+	localPath, err := resolveImageFilePath(*imageOnlyPost.ImageURL)
+	if err != nil {
+		t.Fatalf("resolve image path: %v", err)
+	}
+	if _, err := os.Stat(localPath); err != nil {
+		t.Fatalf("expected uploaded image file to exist: %v", err)
+	}
+
+	feed := fetchFeed(t, client, server.URL)
+	if findPostByID(feed, imagePost.ID).ImageURL == nil {
+		t.Fatalf("expected feed to include image metadata")
+	}
+	if findPostByID(feed, imageOnlyPost.ID).ImageURL == nil {
+		t.Fatalf("expected feed to include image-only metadata")
+	}
+
+	expiredAt := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339)
+	if _, err := db.Exec("UPDATE posts SET image_expires_at = ? WHERE id = ?", expiredAt, imageOnlyPost.ID); err != nil {
+		t.Fatalf("expire image in db: %v", err)
+	}
+
+	if err := cleanupExpiredImages(time.Now().UTC()); err != nil {
+		t.Fatalf("cleanup expired images: %v", err)
+	}
+	if err := cleanupExpiredImages(time.Now().UTC()); err != nil {
+		t.Fatalf("cleanup should be idempotent: %v", err)
+	}
+
+	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
+		t.Fatalf("expected expired image file to be deleted, got %v", err)
+	}
+
+	_, expiredStatus := getBinary(t, client, server.URL+*imageOnlyPost.ImageURL)
+	if expiredStatus != http.StatusNotFound {
+		t.Fatalf("expected deleted image to return 404, got %d", expiredStatus)
+	}
+
+	feedAfterCleanup := fetchFeed(t, client, server.URL)
+	expiredPost := findPostByID(feedAfterCleanup, imageOnlyPost.ID)
+	if expiredPost.ImageURL != nil || expiredPost.ImageExpiresAt != nil {
+		t.Fatalf("expected expired image metadata to be cleared, got %+v", expiredPost)
+	}
+
+	activePost := findPostByID(feedAfterCleanup, imagePost.ID)
+	if activePost.ImageURL == nil || activePost.ImageExpiresAt == nil {
+		t.Fatalf("expected active image metadata to remain, got %+v", activePost)
+	}
+}
+
+func TestCreatePostRejectsInvalidImage(t *testing.T) {
+	server := setupTestServer(t)
+	defer server.Close()
+
+	client := newSessionClient(t)
+	registerUser(t, client, server.URL, "dory", "secret12")
+
+	response := createMultipartPostExpectFailure(t, client, server.URL, "Невалидная картинка", "bad.txt", []byte("not an image"))
+	if !strings.Contains(response.Message, "Допустимы только") {
+		t.Fatalf("expected invalid mime error, got %q", response.Message)
+	}
+
+	assertImageDirEmpty(t)
+}
+
+func TestCreatePostRejectsOversizedImage(t *testing.T) {
+	server := setupTestServer(t)
+	defer server.Close()
+
+	client := newSessionClient(t)
+	registerUser(t, client, server.URL, "marlin", "secret12")
+
+	largeImage := bytes.Repeat([]byte("a"), maxImageSize+1024)
+	response := createMultipartPostExpectFailure(t, client, server.URL, "Слишком большая картинка", "huge.png", largeImage)
+	if !strings.Contains(response.Message, "слишком большая") {
+		t.Fatalf("expected oversize error, got %q", response.Message)
+	}
+
+	assertImageDirEmpty(t)
+}
+
 func setupTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
+	rootDir := t.TempDir()
+	testDB := openTestDB(t, filepath.Join(rootDir, "kusovok-test.db"))
+
+	previousDB := db
 	previousCookiePath := cookiePath
 	previousSecureCookies := secureCookies
+	previousImageDirPath := imageDirPath
+
+	db = testDB
 	cookiePath = "/"
 	secureCookies = false
+	imageDirPath = filepath.Join(rootDir, "img")
+
 	t.Cleanup(func() {
+		db = previousDB
 		cookiePath = previousCookiePath
 		secureCookies = previousSecureCookies
-	})
-
-	testDB, err := openDB(filepath.Join(t.TempDir(), "kusovok-test.db"))
-	if err != nil {
-		t.Fatalf("open test db: %v", err)
-	}
-	db = testDB
-	t.Cleanup(func() {
-		_ = db.Close()
+		imageDirPath = previousImageDirPath
+		_ = testDB.Close()
 	})
 
 	if err := initDB(); err != nil {
 		t.Fatalf("init db: %v", err)
 	}
+	if err := ensureImageDir(); err != nil {
+		t.Fatalf("ensure image dir: %v", err)
+	}
 
 	return httptest.NewServer(newServerMux())
+}
+
+func openTestDB(t *testing.T, dbFile string) *sql.DB {
+	t.Helper()
+
+	testDB, err := openDB(dbFile)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	return testDB
 }
 
 func newSessionClient(t *testing.T) *http.Client {
@@ -127,6 +298,31 @@ func createPostForTest(t *testing.T, client *http.Client, baseURL, content strin
 		t.Fatalf("decode post: %v", err)
 	}
 	return post
+}
+
+func createMultipartPostForTest(t *testing.T, client *http.Client, baseURL, content, fileName string, data []byte) Post {
+	t.Helper()
+
+	response := requestMultipart(t, client, baseURL+"/api/posts", content, fileName, data)
+	if !response.Success {
+		t.Fatalf("create multipart post failed: %s", response.Message)
+	}
+
+	var post Post
+	if err := json.Unmarshal(response.Data, &post); err != nil {
+		t.Fatalf("decode multipart post: %v", err)
+	}
+	return post
+}
+
+func createMultipartPostExpectFailure(t *testing.T, client *http.Client, baseURL, content, fileName string, data []byte) apiResponse {
+	t.Helper()
+
+	response := requestMultipart(t, client, baseURL+"/api/posts", content, fileName, data)
+	if response.Success {
+		t.Fatalf("expected multipart post to fail")
+	}
+	return response
 }
 
 func likePostForTest(t *testing.T, client *http.Client, baseURL string, postID int64) likeResponse {
@@ -191,5 +387,152 @@ func requestJSON(t *testing.T, client *http.Client, method, url string, payload 
 
 	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
 		t.Fatalf("decode response: %v", err)
+	}
+}
+
+func requestMultipart(t *testing.T, client *http.Client, url, content, fileName string, data []byte) apiResponse {
+	t.Helper()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	if err := writer.WriteField("content", content); err != nil {
+		t.Fatalf("write content field: %v", err)
+	}
+	if data != nil {
+		fileWriter, err := writer.CreateFormFile("image", fileName)
+		if err != nil {
+			t.Fatalf("create form file: %v", err)
+		}
+		if _, err := fileWriter.Write(data); err != nil {
+			t.Fatalf("write form file: %v", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url, &body)
+	if err != nil {
+		t.Fatalf("new multipart request: %v", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("do multipart request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var response apiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode multipart response: %v", err)
+	}
+	return response
+}
+
+func getBinary(t *testing.T, client *http.Client, url string) ([]byte, int) {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("new binary request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("do binary request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read binary response: %v", err)
+	}
+	return data, resp.StatusCode
+}
+
+func tableColumns(t *testing.T, database *sql.DB, table string) map[string]bool {
+	t.Helper()
+
+	rows, err := database.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		t.Fatalf("table info query: %v", err)
+	}
+	defer rows.Close()
+
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name string
+		var dataType string
+		var notNull int
+		var defaultValue sql.NullString
+		var primaryKey int
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
+			t.Fatalf("scan table info: %v", err)
+		}
+		columns[name] = true
+	}
+	return columns
+}
+
+func hasIndex(t *testing.T, database *sql.DB, table, index string) bool {
+	t.Helper()
+
+	rows, err := database.Query("PRAGMA index_list(" + table + ")")
+	if err != nil {
+		t.Fatalf("index list query: %v", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var seq int
+		var name string
+		var unique int
+		var origin string
+		var partial int
+		if err := rows.Scan(&seq, &name, &unique, &origin, &partial); err != nil {
+			t.Fatalf("scan index list: %v", err)
+		}
+		if name == index {
+			return true
+		}
+	}
+	return false
+}
+
+func findPostByID(posts []Post, postID int64) Post {
+	for _, post := range posts {
+		if post.ID == postID {
+			return post
+		}
+	}
+	return Post{}
+}
+
+func assertImageDirEmpty(t *testing.T) {
+	t.Helper()
+
+	entries, err := os.ReadDir(imageDirPath)
+	if err != nil {
+		t.Fatalf("read image dir: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected image dir to be empty, got %d file(s)", len(entries))
+	}
+}
+
+func pngFixture() []byte {
+	return []byte{
+		0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+		0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+		0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41,
+		0x54, 0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+		0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D,
+		0xB1, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+		0x44, 0xAE, 0x42, 0x60, 0x82,
 	}
 }

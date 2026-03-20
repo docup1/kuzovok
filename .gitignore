@@ -5,5 +5,8 @@ kusovok.db
 *.db-shm
 *.db-wal
 
+img/*
+!img/.gitkeep
+
 coverage.out
 dist/
