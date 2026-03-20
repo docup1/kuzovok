@@ -84,7 +84,7 @@ function proxy_api_request(string $proxy_url, string $cookie_path, bool $is_http
         return strlen($headerLine);
     });
 
-    $forward_headers = collect_forward_headers();
+    $forward_headers = collect_forward_headers(empty($_FILES) ? ($_SERVER['CONTENT_TYPE'] ?? null) : null);
     if (!empty($forward_headers)) {
         curl_setopt($ch, CURLOPT_HTTPHEADER, $forward_headers);
     }
@@ -125,8 +125,21 @@ function proxy_api_request(string $proxy_url, string $cookie_path, bool $is_http
 function proxy_api_request_via_stream(string $proxy_url, string $cookie_path, bool $is_https): void
 {
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-    $headers = collect_stream_forward_headers();
-    $body = file_get_contents('php://input');
+    $body = '';
+    $content_type = $_SERVER['CONTENT_TYPE'] ?? null;
+
+    if (!empty($_FILES)) {
+        $multipart_payload = build_stream_multipart_payload($_POST, $_FILES);
+        $body = $multipart_payload['body'];
+        $content_type = $multipart_payload['content_type'];
+    } else {
+        $raw_body = file_get_contents('php://input');
+        if ($raw_body !== false) {
+            $body = $raw_body;
+        }
+    }
+
+    $headers = collect_stream_forward_headers($content_type, strlen($body));
 
     $options = [
         'http' => [
@@ -137,7 +150,7 @@ function proxy_api_request_via_stream(string $proxy_url, string $cookie_path, bo
         ],
     ];
 
-    if ($body !== false && strlen($body) > 0) {
+    if ($body !== '') {
         $options['http']['content'] = $body;
     }
 
@@ -160,7 +173,7 @@ function proxy_api_request_via_stream(string $proxy_url, string $cookie_path, bo
     echo $response === false ? '' : $response;
 }
 
-function collect_forward_headers(): array
+function collect_forward_headers(?string $content_type = null): array
 {
     $headers = [];
 
@@ -177,19 +190,19 @@ function collect_forward_headers(): array
         $headers[] = $header . ': ' . $value;
     }
 
-    if (empty($_FILES) && !empty($_SERVER['CONTENT_TYPE'])) {
-        $headers[] = 'Content-Type: ' . $_SERVER['CONTENT_TYPE'];
+    if (!empty($content_type)) {
+        $headers[] = 'Content-Type: ' . $content_type;
     }
 
     return $headers;
 }
 
-function collect_stream_forward_headers(): array
+function collect_stream_forward_headers(?string $content_type, int $content_length): array
 {
-    $headers = collect_forward_headers();
+    $headers = collect_forward_headers($content_type);
 
-    if (!empty($_SERVER['CONTENT_TYPE'])) {
-        $headers[] = 'Content-Type: ' . $_SERVER['CONTENT_TYPE'];
+    if ($content_length > 0) {
+        $headers[] = 'Content-Length: ' . $content_length;
     }
 
     return $headers;
@@ -208,6 +221,101 @@ function build_multipart_fields(array $post_fields, array $files): array
     }
 
     return $post_fields;
+}
+
+function build_stream_multipart_payload(array $post_fields, array $files): array
+{
+    $boundary = '----KuzovokProxy' . bin2hex(random_bytes(12));
+    $eol = "\r\n";
+    $body = '';
+
+    foreach (flatten_form_fields($post_fields) as $field_name => $value) {
+        $body .= '--' . $boundary . $eol;
+        $body .= 'Content-Disposition: form-data; name="' . escape_multipart_value($field_name) . '"' . $eol . $eol;
+        $body .= (string) $value . $eol;
+    }
+
+    foreach (normalize_uploaded_files($files) as $file) {
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            continue;
+        }
+        if (empty($file['tmp_name']) || !is_readable($file['tmp_name'])) {
+            continue;
+        }
+
+        $content = file_get_contents($file['tmp_name']);
+        if ($content === false) {
+            continue;
+        }
+
+        $mime = !empty($file['type']) ? $file['type'] : 'application/octet-stream';
+        $name = !empty($file['name']) ? $file['name'] : 'upload.bin';
+
+        $body .= '--' . $boundary . $eol;
+        $body .= 'Content-Disposition: form-data; name="' . escape_multipart_value($file['field']) . '"; filename="' . escape_multipart_value($name) . '"' . $eol;
+        $body .= 'Content-Type: ' . $mime . $eol . $eol;
+        $body .= $content . $eol;
+    }
+
+    $body .= '--' . $boundary . '--' . $eol;
+
+    return [
+        'content_type' => 'multipart/form-data; boundary=' . $boundary,
+        'body' => $body,
+    ];
+}
+
+function flatten_form_fields(array $fields, string $prefix = ''): array
+{
+    $result = [];
+
+    foreach ($fields as $key => $value) {
+        $field_name = $prefix === '' ? (string) $key : $prefix . '[' . $key . ']';
+
+        if (is_array($value)) {
+            $result += flatten_form_fields($value, $field_name);
+            continue;
+        }
+
+        $result[$field_name] = $value;
+    }
+
+    return $result;
+}
+
+function normalize_uploaded_files(array $files): array
+{
+    $result = [];
+
+    foreach ($files as $field_name => $file) {
+        normalize_uploaded_file_entry($result, (string) $field_name, $file);
+    }
+
+    return $result;
+}
+
+function normalize_uploaded_file_entry(array &$result, string $field_name, array $file): void
+{
+    if (isset($file['name']) && is_array($file['name'])) {
+        foreach (array_keys($file['name']) as $key) {
+            normalize_uploaded_file_entry($result, $field_name . '[' . $key . ']', [
+                'name' => $file['name'][$key] ?? '',
+                'type' => $file['type'][$key] ?? '',
+                'tmp_name' => $file['tmp_name'][$key] ?? '',
+                'error' => $file['error'][$key] ?? UPLOAD_ERR_NO_FILE,
+                'size' => $file['size'][$key] ?? 0,
+            ]);
+        }
+        return;
+    }
+
+    $file['field'] = $field_name;
+    $result[] = $file;
+}
+
+function escape_multipart_value(string $value): string
+{
+    return str_replace(["\\", "\"", "\r", "\n"], ["\\\\", "\\\"", '', ''], $value);
 }
 
 function apply_backend_headers(array $headers, string $cookie_path, bool $is_https): void
