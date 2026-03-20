@@ -3,15 +3,22 @@
  * Кузовок - PHP прокси для Go бэкенда
  */
 
-$backend_url = 'http://127.0.0.1:8080';
+$backend_url = getenv('KUSOVOK_BACKEND_URL') ?: 'http://127.0.0.1:8080';
 $base_dir = __DIR__;
 $static_dir = $base_dir . '/static';
 
 // Получаем URI
 $request_uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$base_path = '/~s409784/kuzovok';
+$script_dir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
+$base_path = $script_dir === '/' || $script_dir === '.' ? '' : rtrim($script_dir, '/');
+$cookie_path = $base_path === '' ? '/' : $base_path . '/';
+$is_https = (
+    (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (isset($_SERVER['SERVER_PORT']) && (string)$_SERVER['SERVER_PORT'] === '443')
+    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+);
 
-if (strpos($request_uri, $base_path) === 0) {
+if ($base_path !== '' && strpos($request_uri, $base_path) === 0) {
     $request_uri = substr($request_uri, strlen($base_path));
 }
 if ($request_uri === '' || $request_uri === '/') {
@@ -65,8 +72,8 @@ if (strpos($request_uri, '/api/') === 0) {
                     $cookie_name = trim($matches[1]);
                     $cookie_content = trim($matches[2]);
                     setcookie($cookie_name, $cookie_content, [
-                        'path' => '/~s409784/kuzovok/',
-                        'secure' => true,
+                        'path' => $cookie_path,
+                        'secure' => $is_https,
                         'httponly' => true,
                         'samesite' => 'Lax'
                     ]);

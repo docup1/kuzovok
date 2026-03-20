@@ -1,0 +1,9 @@
+.DS_Store
+
+kusovok.db
+*.db
+*.db-shm
+*.db-wal
+
+coverage.out
+dist/

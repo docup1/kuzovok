@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -17,11 +18,17 @@ import (
 )
 
 const (
-	jwtSecret     = "kusovok-secret-key-change-in-production"
 	jwtExpireHour = 24
 )
 
-var db *sql.DB
+var (
+	db            *sql.DB
+	jwtSecret     = getEnv("KUSOVOK_JWT_SECRET", "kusovok-secret-key-change-in-production")
+	serverAddr    = getEnv("KUSOVOK_ADDR", ":8080")
+	dbPath        = getEnv("KUSOVOK_DB_PATH", "./kusovok.db")
+	cookiePath    = getEnv("KUSOVOK_COOKIE_PATH", "/")
+	secureCookies = strings.EqualFold(getEnv("KUSOVOK_SECURE_COOKIE", "false"), "true")
+)
 
 type User struct {
 	ID       int64  `json:"id"`
@@ -36,6 +43,7 @@ type Post struct {
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"created_at"`
 	Likes     int       `json:"likes"`
+	Liked     bool      `json:"liked"`
 }
 
 type Claims struct {
@@ -52,28 +60,85 @@ type Response struct {
 
 func main() {
 	var err error
-	db, err = sql.Open("sqlite", "./kusovok.db")
+	db, err = openDB(dbPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	initDB()
-	http.HandleFunc("/", staticHandler)
-	http.HandleFunc("/api/register", registerHandler)
-	http.HandleFunc("/api/login", loginHandler)
-	http.HandleFunc("/api/logout", logoutHandler)
-	http.HandleFunc("/api/me", authMiddleware(meHandler))
-	http.HandleFunc("/api/posts", authMiddleware(postsHandler))
-	http.HandleFunc("/api/feed", authMiddleware(feedHandler))
-	http.HandleFunc("/api/like", authMiddleware(likeHandler))
-	fmt.Println("🐠 Кузовок запущен на http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	if err := initDB(); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("🐠 Кузовок запущен на %s\n", publicServerURL(serverAddr))
+	log.Fatal(http.ListenAndServe(serverAddr, newServerMux()))
 }
 
-func initDB() {
-	db.Exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
-	db.Exec("CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id))")
-	db.Exec("CREATE TABLE IF NOT EXISTS likes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, post_id INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (post_id) REFERENCES posts(id), UNIQUE(user_id, post_id))")
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok && strings.TrimSpace(value) != "" {
+		return value
+	}
+	return fallback
+}
+
+func openDB(path string) (*sql.DB, error) {
+	database, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, err
+	}
+	database.SetMaxOpenConns(1)
+	return database, nil
+}
+
+func initDB() error {
+	statements := []string{
+		"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
+		"CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id))",
+		"CREATE TABLE IF NOT EXISTS likes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, post_id INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (post_id) REFERENCES posts(id), UNIQUE(user_id, post_id))",
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func newServerMux() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", staticHandler)
+	mux.HandleFunc("/api/register", registerHandler)
+	mux.HandleFunc("/api/login", loginHandler)
+	mux.HandleFunc("/api/logout", logoutHandler)
+	mux.HandleFunc("/api/me", authMiddleware(meHandler))
+	mux.HandleFunc("/api/posts", authMiddleware(postsHandler))
+	mux.HandleFunc("/api/feed", authMiddleware(feedHandler))
+	mux.HandleFunc("/api/like", authMiddleware(likeHandler))
+	return mux
+}
+
+func setAuthCookie(w http.ResponseWriter, token string, maxAge int) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "token",
+		Value:    token,
+		Path:     cookiePath,
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   secureCookies,
+	})
+}
+
+func clearAuthCookie(w http.ResponseWriter) {
+	setAuthCookie(w, "", -1)
+}
+
+func publicServerURL(addr string) string {
+	if strings.HasPrefix(addr, "http://") || strings.HasPrefix(addr, "https://") {
+		return addr
+	}
+	if strings.HasPrefix(addr, ":") {
+		return "http://localhost" + addr
+	}
+	return "http://" + addr
 }
 
 func staticHandler(w http.ResponseWriter, r *http.Request) {
@@ -173,7 +238,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	userID, _ := result.LastInsertId()
 	token, _ := generateToken(userID, req.Username)
-	http.SetCookie(w, &http.Cookie{Name: "token", Value: token, Path: "/", MaxAge: jwtExpireHour * 3600, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	setAuthCookie(w, token, jwtExpireHour*3600)
 	writeSuccess(w, "Регистрация успешна", map[string]interface{}{"id": userID, "username": req.Username})
 }
 
@@ -209,12 +274,12 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "token", Value: token, Path: "/", MaxAge: jwtExpireHour * 3600, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	setAuthCookie(w, token, jwtExpireHour*3600)
 	writeSuccess(w, "Вход успешен", map[string]interface{}{"id": user.ID, "username": user.Username})
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{Name: "token", Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
+	clearAuthCookie(w)
 	writeSuccess(w, "Выход успешен", nil)
 }
 
@@ -240,7 +305,9 @@ func postsHandler(w http.ResponseWriter, r *http.Request) {
 func createPost(w http.ResponseWriter, r *http.Request) {
 	userID, _ := strconv.ParseInt(r.Header.Get("X-User-ID"), 10, 64)
 	username := r.Header.Get("X-Username")
-	var req struct{ Content string }
+	var req struct {
+		Content string `json:"content"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "Неверный формат данных")
 		return
@@ -266,61 +333,27 @@ func createPost(w http.ResponseWriter, r *http.Request) {
 
 func getUserPosts(w http.ResponseWriter, r *http.Request) {
 	userID, _ := strconv.ParseInt(r.Header.Get("X-User-ID"), 10, 64)
-	rows, err := db.Query("SELECT p.id, p.user_id, u.username, p.content, p.created_at, (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as likes FROM posts p JOIN users u ON p.user_id = u.id WHERE p.user_id = ? ORDER BY p.created_at DESC", userID)
+	posts, err := queryPosts(
+		"SELECT p.id, p.user_id, u.username, p.content, p.created_at, (SELECT COUNT(*) FROM likes WHERE post_id = p.id) AS likes, EXISTS(SELECT 1 FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked FROM posts p JOIN users u ON p.user_id = u.id WHERE p.user_id = ? ORDER BY p.created_at DESC",
+		userID,
+		userID,
+	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
 		return
-	}
-	defer rows.Close()
-	posts := []Post{}
-	for rows.Next() {
-		var post Post
-		var createdAt string
-		var likes int
-		if err := rows.Scan(&post.ID, &post.UserID, &post.Username, &post.Content, &createdAt, &likes); err != nil {
-			log.Printf("Scan error: %v", err)
-			continue
-		}
-		post.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
-		if err != nil {
-			post.CreatedAt, err = time.Parse("2006-01-02 15:04:05", createdAt)
-		}
-		if err != nil {
-			log.Printf("Parse error: %v, createdAt: %s", err, createdAt)
-			post.CreatedAt = time.Now()
-		}
-		post.Likes = likes
-		posts = append(posts, post)
 	}
 	writeSuccess(w, "", posts)
 }
 
 func feedHandler(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT p.id, p.user_id, u.username, p.content, p.created_at, (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as likes FROM posts p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT 50")
+	currentUserID, _ := strconv.ParseInt(r.Header.Get("X-User-ID"), 10, 64)
+	posts, err := queryPosts(
+		"SELECT p.id, p.user_id, u.username, p.content, p.created_at, (SELECT COUNT(*) FROM likes WHERE post_id = p.id) AS likes, EXISTS(SELECT 1 FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked FROM posts p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT 50",
+		currentUserID,
+	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
 		return
-	}
-	defer rows.Close()
-	posts := []Post{}
-	for rows.Next() {
-		var post Post
-		var createdAt string
-		var likes int
-		if err := rows.Scan(&post.ID, &post.UserID, &post.Username, &post.Content, &createdAt, &likes); err != nil {
-			log.Printf("Scan error: %v", err)
-			continue
-		}
-		post.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
-		if err != nil {
-			post.CreatedAt, err = time.Parse("2006-01-02 15:04:05", createdAt)
-		}
-		if err != nil {
-			log.Printf("Parse error: %v, createdAt: %s", err, createdAt)
-			post.CreatedAt = time.Now()
-		}
-		post.Likes = likes
-		posts = append(posts, post)
 	}
 	writeSuccess(w, "", posts)
 }
@@ -331,27 +364,87 @@ func likeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID, _ := strconv.ParseInt(r.Header.Get("X-User-ID"), 10, 64)
-	log.Printf("Like request: userID=%d", userID)
-	var req struct{ PostID int64 }
+	var req struct {
+		PostID int64 `json:"post_id"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Decode error: %v", err)
 		writeError(w, http.StatusBadRequest, "Неверный формат данных")
 		return
 	}
-	log.Printf("PostID=%d", req.PostID)
+	if req.PostID <= 0 {
+		writeError(w, http.StatusBadRequest, "Неверный идентификатор поста")
+		return
+	}
 	var postExists int
-	db.QueryRow("SELECT COUNT(*) FROM posts WHERE id = ?", req.PostID).Scan(&postExists)
+	if err := db.QueryRow("SELECT COUNT(*) FROM posts WHERE id = ?", req.PostID).Scan(&postExists); err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
 	if postExists == 0 {
 		writeError(w, http.StatusNotFound, "Пост не найден")
 		return
 	}
+	liked := true
 	_, err := db.Exec("INSERT INTO likes (user_id, post_id) VALUES (?, ?)", userID, req.PostID)
 	if err != nil {
-		log.Printf("Insert like error: %v", err)
-		db.Exec("DELETE FROM likes WHERE user_id = ? AND post_id = ?", userID, req.PostID)
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			liked = false
+			if _, deleteErr := db.Exec("DELETE FROM likes WHERE user_id = ? AND post_id = ?", userID, req.PostID); deleteErr != nil {
+				log.Printf("Delete like error: %v", deleteErr)
+				writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+				return
+			}
+		} else {
+			log.Printf("Insert like error: %v", err)
+			writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+			return
+		}
 	}
 	var likes int
-	db.QueryRow("SELECT COUNT(*) FROM likes WHERE post_id = ?", req.PostID).Scan(&likes)
-	log.Printf("Total likes=%d", likes)
-	writeSuccess(w, "", map[string]interface{}{"likes": likes})
+	if err := db.QueryRow("SELECT COUNT(*) FROM likes WHERE post_id = ?", req.PostID).Scan(&likes); err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+	writeSuccess(w, "", map[string]interface{}{"likes": likes, "liked": liked})
+}
+
+func queryPosts(query string, args ...interface{}) ([]Post, error) {
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	posts := []Post{}
+	for rows.Next() {
+		var post Post
+		var createdAt string
+		var likes int
+		var liked int
+		if err := rows.Scan(&post.ID, &post.UserID, &post.Username, &post.Content, &createdAt, &likes, &liked); err != nil {
+			log.Printf("Scan error: %v", err)
+			continue
+		}
+		post.CreatedAt = parseTimestamp(createdAt)
+		post.Likes = likes
+		post.Liked = liked == 1
+		posts = append(posts, post)
+	}
+
+	return posts, rows.Err()
+}
+
+func parseTimestamp(value string) time.Time {
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+	}
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed
+		}
+	}
+	log.Printf("Parse error: unsupported timestamp format %q", value)
+	return time.Now()
 }
