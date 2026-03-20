@@ -277,8 +277,18 @@ func getUserPosts(w http.ResponseWriter, r *http.Request) {
 		var post Post
 		var createdAt string
 		var likes int
-		rows.Scan(&post.ID, &post.UserID, &post.Username, &post.Content, &createdAt, &likes)
-		post.CreatedAt, _ = time.ParseInLocation("2006-01-02 15:04:05", createdAt, time.Local)
+		if err := rows.Scan(&post.ID, &post.UserID, &post.Username, &post.Content, &createdAt, &likes); err != nil {
+			log.Printf("Scan error: %v", err)
+			continue
+		}
+		post.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
+		if err != nil {
+			post.CreatedAt, err = time.Parse("2006-01-02 15:04:05", createdAt)
+		}
+		if err != nil {
+			log.Printf("Parse error: %v, createdAt: %s", err, createdAt)
+			post.CreatedAt = time.Now()
+		}
 		post.Likes = likes
 		posts = append(posts, post)
 	}
@@ -297,8 +307,18 @@ func feedHandler(w http.ResponseWriter, r *http.Request) {
 		var post Post
 		var createdAt string
 		var likes int
-		rows.Scan(&post.ID, &post.UserID, &post.Username, &post.Content, &createdAt, &likes)
-		post.CreatedAt, _ = time.ParseInLocation("2006-01-02 15:04:05", createdAt, time.Local)
+		if err := rows.Scan(&post.ID, &post.UserID, &post.Username, &post.Content, &createdAt, &likes); err != nil {
+			log.Printf("Scan error: %v", err)
+			continue
+		}
+		post.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
+		if err != nil {
+			post.CreatedAt, err = time.Parse("2006-01-02 15:04:05", createdAt)
+		}
+		if err != nil {
+			log.Printf("Parse error: %v, createdAt: %s", err, createdAt)
+			post.CreatedAt = time.Now()
+		}
 		post.Likes = likes
 		posts = append(posts, post)
 	}
@@ -311,11 +331,14 @@ func likeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID, _ := strconv.ParseInt(r.Header.Get("X-User-ID"), 10, 64)
+	log.Printf("Like request: userID=%d", userID)
 	var req struct{ PostID int64 }
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Decode error: %v", err)
 		writeError(w, http.StatusBadRequest, "Неверный формат данных")
 		return
 	}
+	log.Printf("PostID=%d", req.PostID)
 	var postExists int
 	db.QueryRow("SELECT COUNT(*) FROM posts WHERE id = ?", req.PostID).Scan(&postExists)
 	if postExists == 0 {
@@ -324,9 +347,11 @@ func likeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := db.Exec("INSERT INTO likes (user_id, post_id) VALUES (?, ?)", userID, req.PostID)
 	if err != nil {
+		log.Printf("Insert like error: %v", err)
 		db.Exec("DELETE FROM likes WHERE user_id = ? AND post_id = ?", userID, req.PostID)
 	}
 	var likes int
 	db.QueryRow("SELECT COUNT(*) FROM likes WHERE post_id = ?", req.PostID).Scan(&likes)
+	log.Printf("Total likes=%d", likes)
 	writeSuccess(w, "", map[string]interface{}{"likes": likes})
 }
