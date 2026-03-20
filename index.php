@@ -25,24 +25,29 @@ if (strpos($request_uri, '/api/') === 0) {
     $method = $_SERVER['REQUEST_METHOD'];
     $content = file_get_contents('php://input');
     
-    // Собираем заголовки запроса
+    // Собираем заголовки запроса вручную
     $headers = [];
-    foreach (getallheaders() as $name => $value) {
-        if (!in_array(strtolower($name), ['host', 'connection', 'content-length'])) {
-            $headers[] = "$name: $value";
+    foreach ($_SERVER as $key => $value) {
+        if (strpos($key, 'HTTP_') === 0) {
+            $header = str_replace('_', ' ', substr($key, 5));
+            $header = str_replace(' ', '-', ucwords(strtolower($header)));
+            if (!in_array($header, ['Content-Length'])) {
+                $headers[] = "$header: $value";
+            }
         }
     }
+    $headers[] = "Content-Type: application/json";
     
     $options = [
         'http' => [
             'method' => $method,
-            'header' => implode("\r\n", $headers) . "\r\nContent-Type: application/json\r\n",
+            'header' => implode("\r\n", $headers) . "\r\n",
             'timeout' => 30,
             'ignore_errors' => true
         ]
     ];
     
-    if ($method === 'POST' || $method === 'PUT' || $method === 'PATCH') {
+    if ($content && strlen($content) > 0) {
         $options['http']['content'] = $content;
     }
     
@@ -51,17 +56,14 @@ if (strpos($request_uri, '/api/') === 0) {
     // Получаем ответ с заголовками
     $response = @file_get_contents($proxy_url, false, $context);
     
-    // Копируем заголовки ответа
+    // Копируем заголовки Set-Cookie
     if (isset($http_response_header)) {
         foreach ($http_response_header as $header) {
             if (stripos($header, 'Set-Cookie:') === 0) {
-                // Извлекаем значение куки
                 $cookie_value = substr($header, strlen('Set-Cookie:'));
-                // Парсим имя куки
                 if (preg_match('/^([^=]+)=([^;]+)/', $cookie_value, $matches)) {
-                    $cookie_name = $matches[1];
-                    $cookie_content = $matches[2];
-                    // Устанавливаем куку с правильными параметрами
+                    $cookie_name = trim($matches[1]);
+                    $cookie_content = trim($matches[2]);
                     setcookie($cookie_name, $cookie_content, [
                         'path' => '/~s409784/kuzovok/',
                         'secure' => true,
