@@ -8,13 +8,25 @@ $backend_url = 'http://127.0.0.1:8080';
 $base_dir = __DIR__;
 $static_dir = $base_dir . '/static';
 
-// Получаем URI
-$request_uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+// Получаем URI из PATH_INFO или REQUEST_URI
+if (isset($_SERVER['PATH_INFO']) && $_SERVER['PATH_INFO']) {
+    $request_uri = $_SERVER['PATH_INFO'];
+} else {
+    $request_uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    // Удаляем базовый путь
+    $base_path = '/~s409784/kuzovok';
+    if (strpos($request_uri, $base_path) === 0) {
+        $request_uri = substr($request_uri, strlen($base_path));
+    }
+    if ($request_uri === '') {
+        $request_uri = '/';
+    }
+}
 
 // Логирование
-error_log("Kuzovok proxy: $request_uri");
+error_log("Kuzovok: $request_uri");
 
-// API запросы - проксируем
+// API запросы - проксируем на бэкенд
 if (strpos($request_uri, '/api/') === 0) {
     $proxy_url = $backend_url . $request_uri;
     $ch = curl_init($proxy_url);
@@ -39,7 +51,6 @@ if (strpos($request_uri, '/api/') === 0) {
 
     $response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
 
     if (curl_errno($ch)) {
         http_response_code(502);
@@ -47,9 +58,6 @@ if (strpos($request_uri, '/api/') === 0) {
         echo json_encode(['success' => false, 'message' => 'Backend: ' . curl_error($ch)]);
     } else {
         http_response_code($http_code);
-        if ($content_type) {
-            header("Content-Type: " . $content_type);
-        }
         echo $response;
     }
     curl_close($ch);

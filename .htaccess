@@ -1,19 +1,9 @@
 # Кузовок - маршрутизация для shared-хостинга
+# Без mod_rewrite
+
 DirectoryIndex index.php
 
-<IfModule mod_rewrite.c>
-    RewriteEngine On
-    RewriteBase /~s409784/kuzovok/
-    
-    # Если файл существует - отдаём его
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
-    
-    # Всё остальное направляем на index.php
-    RewriteRule ^ index.php [QSA,L]
-</IfModule>
-
-# Защита файлов
+# Защита скрытых файлов
 <FilesMatch "^\.">
     Order allow,deny
     Deny from all
@@ -26,3 +16,6 @@ DirectoryIndex index.php
     ExpiresByType text/css "access plus 1 week"
     ExpiresByType application/javascript "access plus 1 week"
 </IfModule>
+
+# Обработка ошибок
+ErrorDocument 404 /~s409784/kuzovok/index.php
