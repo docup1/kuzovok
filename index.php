@@ -4,6 +4,7 @@
  */
 
 $backend_url = getenv('KUSOVOK_BACKEND_URL') ?: 'http://127.0.0.1:8080';
+$proxy_driver = strtolower(getenv('KUSOVOK_PROXY_DRIVER') ?: 'auto');
 $base_dir = __DIR__;
 $static_dir = $base_dir . '/static';
 $image_dir = $base_dir . '/img';
@@ -26,7 +27,7 @@ if ($request_uri === '' || $request_uri === '/') {
 }
 
 if (strpos($request_uri, '/api/') === 0) {
-    proxy_api_request($backend_url . $request_uri, $cookie_path, $is_https);
+    proxy_api_request($backend_url . $request_uri, $cookie_path, $is_https, $proxy_driver);
     exit;
 }
 
@@ -50,8 +51,16 @@ if (is_file($file_path)) {
 http_response_code(404);
 echo 'Not found: ' . htmlspecialchars($request_uri, ENT_QUOTES, 'UTF-8');
 
-function proxy_api_request(string $proxy_url, string $cookie_path, bool $is_https): void
+function proxy_api_request(string $proxy_url, string $cookie_path, bool $is_https, string $proxy_driver): void
 {
+    $force_stream = $proxy_driver === 'stream';
+    $force_curl = $proxy_driver === 'curl';
+
+    if ($force_stream || (!$force_curl && !function_exists('curl_init'))) {
+        proxy_api_request_via_stream($proxy_url, $cookie_path, $is_https);
+        return;
+    }
+
     if (!function_exists('curl_init')) {
         http_response_code(500);
         header('Content-Type: application/json');
@@ -113,6 +122,44 @@ function proxy_api_request(string $proxy_url, string $cookie_path, bool $is_http
     echo $response;
 }
 
+function proxy_api_request_via_stream(string $proxy_url, string $cookie_path, bool $is_https): void
+{
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    $headers = collect_stream_forward_headers();
+    $body = file_get_contents('php://input');
+
+    $options = [
+        'http' => [
+            'method' => $method,
+            'header' => empty($headers) ? '' : implode("\r\n", $headers) . "\r\n",
+            'timeout' => 30,
+            'ignore_errors' => true,
+        ],
+    ];
+
+    if ($body !== false && strlen($body) > 0) {
+        $options['http']['content'] = $body;
+    }
+
+    $context = stream_context_create($options);
+    $response = @file_get_contents($proxy_url, false, $context);
+    $response_headers = $http_response_header ?? [];
+    $http_code = extract_http_status_code($response_headers);
+
+    if ($response === false && $http_code === 0) {
+        http_response_code(502);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Backend unavailable']);
+        return;
+    }
+
+    apply_backend_headers($response_headers, $cookie_path, $is_https);
+    if ($http_code > 0) {
+        http_response_code($http_code);
+    }
+    echo $response === false ? '' : $response;
+}
+
 function collect_forward_headers(): array
 {
     $headers = [];
@@ -124,13 +171,24 @@ function collect_forward_headers(): array
 
         $header = str_replace('_', ' ', substr($key, 5));
         $header = str_replace(' ', '-', ucwords(strtolower($header)));
-        if (in_array($header, ['Host', 'Content-Length', 'Content-Type'], true)) {
+        if (in_array($header, ['Host', 'Content-Length', 'Content-Type', 'Connection', 'Accept-Encoding', 'Transfer-Encoding'], true)) {
             continue;
         }
         $headers[] = $header . ': ' . $value;
     }
 
     if (empty($_FILES) && !empty($_SERVER['CONTENT_TYPE'])) {
+        $headers[] = 'Content-Type: ' . $_SERVER['CONTENT_TYPE'];
+    }
+
+    return $headers;
+}
+
+function collect_stream_forward_headers(): array
+{
+    $headers = collect_forward_headers();
+
+    if (!empty($_SERVER['CONTENT_TYPE'])) {
         $headers[] = 'Content-Type: ' . $_SERVER['CONTENT_TYPE'];
     }
 
@@ -182,6 +240,16 @@ function apply_backend_headers(array $headers, string $cookie_path, bool $is_htt
     if (!$content_type_sent) {
         header('Content-Type: application/json');
     }
+}
+
+function extract_http_status_code(array $headers): int
+{
+    foreach ($headers as $header) {
+        if (preg_match('#^HTTP/\S+\s+(\d{3})#i', $header, $matches)) {
+            return (int) $matches[1];
+        }
+    }
+    return 0;
 }
 
 function apply_backend_cookie(string $cookie_header, string $cookie_path, bool $is_https): void

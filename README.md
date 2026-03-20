@@ -73,6 +73,7 @@ make clean
 - `KUSOVOK_SECURE_COOKIE` — `true`/`false`, нужен ли флаг `Secure`
 - `KUSOVOK_IMAGE_DIR` — директория для хранения картинок, по умолчанию `./img`
 - `KUSOVOK_BACKEND_URL` — адрес backend для PHP-прокси
+- `KUSOVOK_PROXY_DRIVER` — `auto`, `curl` или `stream`; по умолчанию `auto`
 
 ## Продовый деплой
 
