@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кузовок</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: sans-serif; min-height: 100vh; background: linear-gradient(180deg, #006994 0%, #003366 50%, #001a33 100%); color: #fff; }
+        .ocean-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
+        .bubble { position: absolute; background: rgba(255,255,255,0.1); border-radius: 50%; animation: rise 8s infinite ease-in; }
+        @keyframes rise { 0% { transform: translateY(100vh) scale(1); opacity: 0; } 50% { opacity: 0.5; } 100% { transform: translateY(-100px) scale(1.2); opacity: 0; } }
+        .fish { position: absolute; animation: swim 20s infinite linear; opacity: 0.6; font-size: 24px; }
+        @keyframes swim { 0% { transform: translateX(100vw); } 100% { transform: translateX(-100px); } }
+        .container { position: relative; z-index: 1; max-width: 700px; margin: 0 auto; padding: 20px; }
+        header { text-align: center; padding: 30px 0; }
+        .logo { font-size: 3em; display: inline-block; animation: float 3s ease-in-out infinite; }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        h1 { font-size: 2.5em; text-shadow: 0 0 20px rgba(0,255,255,0.5); margin-top: 10px; }
+        .auth-container, .app-container { background: rgba(0, 105, 148, 0.3); backdrop-filter: blur(10px); border-radius: 20px; padding: 30px; margin-top: 20px; border: 1px solid rgba(255,255,255,0.1); }
+        .hidden { display: none; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 500; color: #7fdbff; }
+        input, textarea { width: 100%; padding: 12px 15px; border: 2px solid rgba(127, 219, 255, 0.3); border-radius: 10px; background: rgba(0, 51, 102, 0.5); color: #fff; font-size: 16px; }
+        input:focus, textarea:focus { outline: none; border-color: #7fdbff; }
+        textarea { resize: vertical; min-height: 100px; }
+        .btn { background: linear-gradient(135deg, #00bcd4 0%, #0097a7 100%); color: #fff; border: none; padding: 14px 30px; border-radius: 25px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; transition: transform 0.2s; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0, 188, 212, 0.4); }
+        .btn-secondary { background: linear-gradient(135deg, #5c6bc0 0%, #3949ab 100%); }
+        .auth-toggle { text-align: center; margin-top: 20px; color: rgba(255,255,255,0.7); }
+        .auth-toggle a { color: #7fdbff; text-decoration: none; cursor: pointer; }
+        .user-info { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; }
+        .user-info span { color: #7fdbff; }
+        .post-form { margin-bottom: 25px; }
+        .post { background: rgba(0, 51, 102, 0.4); border-radius: 15px; padding: 20px; margin-bottom: 15px; border: 1px solid rgba(127, 219, 255, 0.2); }
+        .post-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .post-author { font-weight: 600; color: #7fdbff; }
+        .post-author::before { content: "🐟 "; }
+        .post-date { font-size: 0.85em; color: rgba(255,255,255,0.5); }
+        .post-content { line-height: 1.6; word-wrap: break-word; }
+        .post-footer { margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .like-btn { background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 1.2em; display: flex; align-items: center; gap: 5px; }
+        .like-btn:hover { color: #ff6b6b; }
+        .like-btn.liked { color: #ff6b6b; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab { flex: 1; padding: 12px; background: rgba(0, 51, 102, 0.3); border: 2px solid rgba(127, 219, 255, 0.3); border-radius: 10px; color: #fff; cursor: pointer; }
+        .tab.active { background: rgba(0, 188, 212, 0.3); border-color: #00bcd4; }
+        .error { background: rgba(255, 107, 107, 0.2); border: 1px solid rgba(255, 107, 107, 0.5); color: #ff6b6b; padding: 12px; border-radius: 10px; margin-bottom: 20px; }
+        .success { background: rgba(102, 252, 185, 0.2); border: 1px solid rgba(102, 252, 185, 0.5); color: #66fcb9; padding: 12px; border-radius: 10px; margin-bottom: 20px; }
+        .empty-state { text-align: center; padding: 40px; color: rgba(255,255,255,0.5); }
+        .seaweed { position: fixed; bottom: 0; width: 60px; background: linear-gradient(to top, #2d5016, #4a7c23); border-radius: 50% 50% 0 0; animation: sway 3s ease-in-out infinite; z-index: 0; }
+        @keyframes sway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+        .seaweed:nth-child(1) { left: 5%; height: 150px; }
+        .seaweed:nth-child(2) { left: 15%; height: 200px; animation-delay: 0.5s; }
+        .seaweed:nth-child(3) { right: 15%; height: 180px; animation-delay: 1s; }
+        .seaweed:nth-child(4) { right: 5%; height: 160px; animation-delay: 1.5s; }
+    </style>
+</head>
+<body>
+    <div class="ocean-bg" id="oceanBg"></div>
+    <div class="seaweed"></div><div class="seaweed"></div><div class="seaweed"></div><div class="seaweed"></div>
+    <div class="container">
+        <header><div class="logo">🐠</div><h1>Кузовок</h1><p style="color:rgba(255,255,255,0.7);margin-top:10px;">Социальная сеть океанариума</p></header>
+        <div id="authContainer" class="auth-container">
+            <div id="loginForm">
+                <h2 style="margin-bottom:25px;text-align:center;">Вход</h2>
+                <div id="loginError" class="error hidden"></div>
+                <div class="form-group"><label>Логин</label><input type="text" id="loginUsername" placeholder="fish"></div>
+                <div class="form-group"><label>Пароль</label><input type="password" id="loginPassword" placeholder="******"></div>
+                <button class="btn" onclick="login()">Войти</button>
+                <div class="auth-toggle">Нет аккаунта? <a onclick="showRegister()">Зарегистрироваться</a></div>
+            </div>
+            <div id="registerForm" class="hidden">
+                <h2 style="margin-bottom:25px;text-align:center;">Регистрация</h2>
+                <div id="registerError" class="error hidden"></div>
+                <div class="form-group"><label>Логин</label><input type="text" id="regUsername" placeholder="fish"></div>
+                <div class="form-group"><label>Пароль</label><input type="password" id="regPassword" placeholder="******"></div>
+                <button class="btn" onclick="register()">Создать аккаунт</button>
+                <div class="auth-toggle">Уже есть аккаунт? <a onclick="showLogin()">Войти</a></div>
+            </div>
+        </div>
+        <div id="appContainer" class="app-container hidden">
+            <div class="user-info"><div>Привет, <span id="username"></span>!</div><button class="btn btn-secondary" style="width:auto;padding:10px 20px;" onclick="logout()">Выйти</button></div>
+            <div class="tabs"><button class="tab active" onclick="showFeed()">Лента</button><button class="tab" onclick="showMyPosts()">Мои посты</button></div>
+            <div class="post-form"><div id="postSuccess" class="success hidden"></div><textarea id="postContent" placeholder="Расскажите обитателям океанариума о чём-нибудь..."></textarea><button class="btn" style="margin-top:15px;" onclick="createPost()">Опубликовать</button></div>
+            <div id="postsContainer"></div>
+        </div>
+    </div>
+    <script>
+        let currentUser=null,currentTab="feed";
+        function createBubbles(){const c=document.getElementById("oceanBg");for(let i=0;i<15;i++){const b=document.createElement("div");b.className="bubble";b.style.left=Math.random()*100+"%";b.style.width=b.style.height=(Math.random()*30+10)+"px";b.style.animationDelay=Math.random()*8+"s";b.style.animationDuration=(Math.random()*5+6)+"s";c.appendChild(b);}}
+        function createFish(){const c=document.getElementById("oceanBg");const emojis=["🐠","🐟","🐡","🦈","🐋"];for(let i=0;i<5;i++){const f=document.createElement("div");f.className="fish";f.textContent=emojis[Math.floor(Math.random()*emojis.length)];f.style.fontSize=(Math.random()*30+20)+"px";f.style.top=(Math.random()*60+10)+"%";f.style.animationDuration=(Math.random()*15+15)+"s";f.style.animationDelay=Math.random()*20+"s";c.appendChild(f);}}
+        async function api(e,o={}){try{const r=await fetch("/api"+e,{...o,headers:{"Content-Type":"application/json",...o.headers}});return await r.json();}catch(e){return{success:false,message:"Error"};}}
+        function showError(id,msg){const el=document.getElementById(id);el.textContent=msg;el.classList.remove("hidden");setTimeout(()=>el.classList.add("hidden"),5000);}
+        function showLogin(){document.getElementById("loginForm").classList.remove("hidden");document.getElementById("registerForm").classList.add("hidden");}
+        function showRegister(){document.getElementById("loginForm").classList.add("hidden");document.getElementById("registerForm").classList.remove("hidden");}
+        async function login(){const username=document.getElementById("loginUsername").value;const password=document.getElementById("loginPassword").value;const r=await api("/login",{method:"POST",body:JSON.stringify({username,password})});if(r.success)checkAuth();else showError("loginError",r.message);}
+        async function register(){const username=document.getElementById("regUsername").value;const password=document.getElementById("regPassword").value;const r=await api("/register",{method:"POST",body:JSON.stringify({username,password})});if(r.success)checkAuth();else showError("registerError",r.message);}
+        async function logout(){await api("/logout",{method:"POST"});currentUser=null;document.getElementById("authContainer").classList.remove("hidden");document.getElementById("appContainer").classList.add("hidden");showLogin();}
+        async function checkAuth(){const r=await api("/me");if(r.success){currentUser=r.data;document.getElementById("username").textContent=currentUser.username;document.getElementById("authContainer").classList.add("hidden");document.getElementById("appContainer").classList.remove("hidden");showFeed();}}
+        async function createPost(){const content=document.getElementById("postContent").value.trim();if(!content)return;const r=await api("/posts",{method:"POST",body:JSON.stringify({content})});if(r.success){document.getElementById("postContent").value="";document.getElementById("postSuccess").textContent="Пост опубликован!";document.getElementById("postSuccess").classList.remove("hidden");setTimeout(()=>document.getElementById("postSuccess").classList.add("hidden"),3000);loadPosts();}}
+        async function loadPosts(){const endpoint=currentTab==="feed"?"/feed":"/posts";const r=await api(endpoint);const c=document.getElementById("postsContainer");if(r.success&&r.data&&r.data.length>0){c.innerHTML=r.data.map(p=>'<div class="post"><div class="post-header"><div class="post-author">'+esc(p.username)+'</div><div class="post-date">'+fmt(p.created_at)+'</div></div><div class="post-content">'+esc(p.content)+'</div><div class="post-footer"><button class="like-btn" onclick="likePost('+p.id+',this)">❤️ <span>'+p.likes+'</span></button></div></div>').join("");}else{c.innerHTML='<div class="empty-state">Пока нет постов</div>';}}
+        async function likePost(id){const r=await api("/like",{method:"POST",body:JSON.stringify({post_id:id})});if(r.success)loadPosts();}
+        function showFeed(){currentTab="feed";document.querySelectorAll(".tab").forEach((t,i)=>t.classList.toggle("active",i===0));loadPosts();}
+        function showMyPosts(){currentTab="my";document.querySelectorAll(".tab").forEach((t,i)=>t.classList.toggle("active",i===1));loadPosts();}
+        function esc(t){const d=document.createElement("div");d.textContent=t;return d.innerHTML;}
+        function fmt(d){return new Date(d).toLocaleDateString("ru-RU",{day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"});}
+        createBubbles();createFish();checkAuth();
+    </script>
+</body>
+</html>
