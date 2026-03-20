@@ -1,7 +1,6 @@
 <?php
 /**
  * Кузовок - PHP прокси для Go бэкенда
- * Без cURL (использует file_get_contents)
  */
 
 $backend_url = 'http://127.0.0.1:8080';
@@ -26,10 +25,18 @@ if (strpos($request_uri, '/api/') === 0) {
     $method = $_SERVER['REQUEST_METHOD'];
     $content = file_get_contents('php://input');
     
+    // Собираем заголовки запроса
+    $headers = [];
+    foreach (getallheaders() as $name => $value) {
+        if (!in_array(strtolower($name), ['host', 'connection', 'content-length'])) {
+            $headers[] = "$name: $value";
+        }
+    }
+    
     $options = [
         'http' => [
             'method' => $method,
-            'header' => "Content-Type: application/json\r\n",
+            'header' => implode("\r\n", $headers) . "\r\nContent-Type: application/json\r\n",
             'timeout' => 30,
             'ignore_errors' => true
         ]
@@ -40,7 +47,31 @@ if (strpos($request_uri, '/api/') === 0) {
     }
     
     $context = stream_context_create($options);
+    
+    // Получаем ответ с заголовками
     $response = @file_get_contents($proxy_url, false, $context);
+    
+    // Копируем заголовки ответа
+    if (isset($http_response_header)) {
+        foreach ($http_response_header as $header) {
+            if (stripos($header, 'Set-Cookie:') === 0) {
+                // Извлекаем значение куки
+                $cookie_value = substr($header, strlen('Set-Cookie:'));
+                // Парсим имя куки
+                if (preg_match('/^([^=]+)=([^;]+)/', $cookie_value, $matches)) {
+                    $cookie_name = $matches[1];
+                    $cookie_content = $matches[2];
+                    // Устанавливаем куку с правильными параметрами
+                    setcookie($cookie_name, $cookie_content, [
+                        'path' => '/~s409784/kuzovok/',
+                        'secure' => true,
+                        'httponly' => true,
+                        'samesite' => 'Lax'
+                    ]);
+                }
+            }
+        }
+    }
     
     if ($response === false) {
         http_response_code(502);
