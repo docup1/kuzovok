@@ -88,9 +88,10 @@
     </div>
     <script>
         let currentUser=null,currentTab="feed";
+        const API_BASE = '';
         function createBubbles(){const c=document.getElementById("oceanBg");for(let i=0;i<15;i++){const b=document.createElement("div");b.className="bubble";b.style.left=Math.random()*100+"%";b.style.width=b.style.height=(Math.random()*30+10)+"px";b.style.animationDelay=Math.random()*8+"s";b.style.animationDuration=(Math.random()*5+6)+"s";c.appendChild(b);}}
         function createFish(){const c=document.getElementById("oceanBg");const emojis=["🐠","🐟","🐡","🦈","🐋"];for(let i=0;i<5;i++){const f=document.createElement("div");f.className="fish";f.textContent=emojis[Math.floor(Math.random()*emojis.length)];f.style.fontSize=(Math.random()*30+20)+"px";f.style.top=(Math.random()*60+10)+"%";f.style.animationDuration=(Math.random()*15+15)+"s";f.style.animationDelay=Math.random()*20+"s";c.appendChild(f);}}
-        async function api(e,o={}){try{const r=await fetch("/api"+e,{...o,headers:{"Content-Type":"application/json",...o.headers}});return await r.json();}catch(e){return{success:false,message:"Error"};}}
+        async function api(e,o={}){try{const r=await fetch(API_BASE+"/api"+e,{...o,headers:{"Content-Type":"application/json",...o.headers}});return await r.json();}catch(e){return{success:false,message:"Error"};}}
         function showError(id,msg){const el=document.getElementById(id);el.textContent=msg;el.classList.remove("hidden");setTimeout(()=>el.classList.add("hidden"),5000);}
         function showLogin(){document.getElementById("loginForm").classList.remove("hidden");document.getElementById("registerForm").classList.add("hidden");}
         function showRegister(){document.getElementById("loginForm").classList.add("hidden");document.getElementById("registerForm").classList.remove("hidden");}
