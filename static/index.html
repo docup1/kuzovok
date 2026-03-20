@@ -29,8 +29,9 @@
         .btn-secondary { background: linear-gradient(135deg, #5c6bc0 0%, #3949ab 100%); }
         .auth-toggle { text-align: center; margin-top: 20px; color: rgba(255,255,255,0.7); }
         .auth-toggle a { color: #7fdbff; text-decoration: none; cursor: pointer; }
-        .user-info { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; }
+        .user-info { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; gap: 16px; }
         .user-info span { color: #7fdbff; }
+        .header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .app-content { display: block; }
         .locked-state { padding: 36px 24px; border-radius: 18px; border: 1px solid rgba(127, 219, 255, 0.16); background: rgba(0, 25, 51, 0.32); text-align: center; }
         .locked-title { font-size: 1.7em; margin-bottom: 14px; color: #d9fbff; }
@@ -95,7 +96,7 @@
             </div>
         </div>
         <div id="appContainer" class="app-container hidden">
-            <div id="appHeader" class="user-info"><div>Привет, <span id="username"></span>!</div><button class="btn btn-secondary" style="width:auto;padding:10px 20px;" onclick="logout()">Выйти</button></div>
+            <div id="appHeader" class="user-info"><div>Привет, <span id="username"></span>!</div><div class="header-actions"><a id="adminPanelLink" class="btn btn-secondary hidden" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" href="#">Админ панель</a><button class="btn btn-secondary" style="width:auto;padding:10px 20px;" onclick="logout()">Выйти</button></div></div>
             <div id="appContent" class="app-content">
                 <div class="tabs"><button class="tab active" onclick="showFeed()">Лента</button><button class="tab" onclick="showMyPosts()">Мои посты</button></div>
                 <div class="post-form">
@@ -152,6 +153,16 @@
                 return url;
             }
             return `${API_BASE}${url}`;
+        }
+
+        function resolveAdminUrl() {
+            return `${API_BASE}/admin`;
+        }
+
+        function syncAdminPanelButton() {
+            const link = document.getElementById("adminPanelLink");
+            link.href = resolveAdminUrl();
+            link.classList.toggle("hidden", !currentUser || currentUser.role !== "admin");
         }
 
         function createBubbles() {
@@ -309,6 +320,7 @@
         async function logout() {
             await api("/logout", { method: "POST" });
             currentUser = null;
+            syncAdminPanelButton();
             applyAllowedState();
             document.getElementById("authContainer").classList.remove("hidden");
             document.getElementById("appContainer").classList.add("hidden");
@@ -320,6 +332,7 @@
             if (response.success) {
                 currentUser = response.data;
                 document.getElementById("username").textContent = currentUser.username;
+                syncAdminPanelButton();
                 document.getElementById("authContainer").classList.add("hidden");
                 document.getElementById("appContainer").classList.remove("hidden");
                 if (currentUser.is_allowed) {

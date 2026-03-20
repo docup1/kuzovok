@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кузовок — Админка</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            min-height: 100vh;
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top right, rgba(112, 232, 255, 0.16), transparent 30%),
+                linear-gradient(180deg, #075c88 0%, #033f63 45%, #022743 100%);
+            color: #eefcff;
+        }
+        a { color: inherit; }
+        .shell { max-width: 1220px; margin: 0 auto; padding: 32px 24px 56px; }
+        .hero {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 20px;
+            margin-bottom: 28px;
+        }
+        .hero-copy h1 { font-size: clamp(2.2rem, 4vw, 3.3rem); line-height: 1.05; margin-bottom: 10px; }
+        .hero-copy p { max-width: 640px; color: rgba(238, 252, 255, 0.72); line-height: 1.6; }
+        .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 999px;
+            padding: 10px 14px;
+            background: rgba(0, 20, 39, 0.28);
+            border: 1px solid rgba(140, 237, 255, 0.18);
+            color: #c6f7ff;
+            font-size: 14px;
+        }
+        .btn, .btn-link {
+            border: none;
+            border-radius: 999px;
+            padding: 12px 18px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, opacity 0.2s ease, background 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn:hover, .btn-link:hover { transform: translateY(-1px); }
+        .btn:disabled { cursor: default; opacity: 0.6; transform: none; }
+        .btn-primary { background: linear-gradient(135deg, #19c7db 0%, #0ea5c2 100%); color: #fff; }
+        .btn-secondary { background: rgba(255, 255, 255, 0.08); color: #e8fbff; border: 1px solid rgba(140, 237, 255, 0.14); }
+        .btn-danger { background: rgba(255, 106, 106, 0.16); color: #ffd6d6; border: 1px solid rgba(255, 125, 125, 0.3); }
+        .btn-link { background: rgba(255, 255, 255, 0.08); color: #e8fbff; border: 1px solid rgba(140, 237, 255, 0.14); }
+        .panel {
+            background: rgba(4, 36, 61, 0.78);
+            border: 1px solid rgba(140, 237, 255, 0.14);
+            border-radius: 26px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 28px 90px rgba(1, 16, 28, 0.24);
+        }
+        .state {
+            padding: 56px 28px;
+            text-align: center;
+        }
+        .state h2 { font-size: 2rem; margin-bottom: 14px; }
+        .state p { max-width: 480px; margin: 0 auto 24px; color: rgba(238, 252, 255, 0.72); line-height: 1.6; }
+        .hidden { display: none !important; }
+        .notice {
+            margin-bottom: 18px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(140, 237, 255, 0.16);
+            background: rgba(8, 78, 108, 0.3);
+            color: #d8fbff;
+        }
+        .notice.error {
+            border-color: rgba(255, 135, 135, 0.34);
+            background: rgba(118, 30, 30, 0.26);
+            color: #ffd8d8;
+        }
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+            gap: 24px;
+        }
+        .section { padding: 24px; }
+        .section-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+        .section-title h2 { font-size: 1.35rem; }
+        .section-title p { color: rgba(238, 252, 255, 0.62); font-size: 14px; }
+        .table-wrap { overflow-x: auto; border-radius: 20px; border: 1px solid rgba(140, 237, 255, 0.1); }
+        table { width: 100%; border-collapse: collapse; min-width: 760px; }
+        th, td { padding: 16px 14px; text-align: left; vertical-align: top; }
+        th {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(238, 252, 255, 0.58);
+            background: rgba(255, 255, 255, 0.03);
+        }
+        tbody tr + tr td { border-top: 1px solid rgba(140, 237, 255, 0.08); }
+        .user-meta { color: rgba(238, 252, 255, 0.6); font-size: 13px; margin-top: 6px; }
+        .role-pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .role-pill.admin { background: rgba(159, 124, 255, 0.22); color: #e5dbff; border: 1px solid rgba(176, 151, 255, 0.3); }
+        .role-pill.user { background: rgba(25, 199, 219, 0.16); color: #c7fbff; border: 1px solid rgba(140, 237, 255, 0.24); }
+        .role-pill.guest { background: rgba(255, 255, 255, 0.08); color: rgba(238, 252, 255, 0.7); border: 1px solid rgba(140, 237, 255, 0.12); }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+        .actions .btn { padding: 10px 14px; font-size: 13px; }
+        .likes-list { display: grid; gap: 16px; }
+        .post-card {
+            padding: 18px;
+            border-radius: 20px;
+            background: rgba(1, 26, 45, 0.42);
+            border: 1px solid rgba(140, 237, 255, 0.1);
+        }
+        .post-card h3 { font-size: 1.08rem; margin-bottom: 6px; }
+        .post-meta { color: rgba(238, 252, 255, 0.56); font-size: 13px; margin-bottom: 12px; }
+        .post-content {
+            color: rgba(238, 252, 255, 0.88);
+            line-height: 1.6;
+            margin-bottom: 12px;
+            white-space: pre-wrap;
+        }
+        .post-flags { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+        .flag {
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            color: #d7fbff;
+            background: rgba(25, 199, 219, 0.12);
+            border: 1px solid rgba(140, 237, 255, 0.18);
+        }
+        .liked-users { display: grid; gap: 8px; }
+        .liked-user {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.04);
+            color: #e8fbff;
+        }
+        .liked-user time { color: rgba(238, 252, 255, 0.54); font-size: 13px; }
+        .empty {
+            padding: 24px;
+            border-radius: 18px;
+            border: 1px dashed rgba(140, 237, 255, 0.16);
+            color: rgba(238, 252, 255, 0.62);
+            text-align: center;
+        }
+        @media (max-width: 980px) {
+            .layout { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 720px) {
+            .shell { padding: 22px 16px 42px; }
+            .hero { flex-direction: column; align-items: stretch; }
+            .hero-actions { justify-content: flex-start; }
+            .section { padding: 18px; }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <header class="hero">
+            <div class="hero-copy">
+                <h1>Админка Кузовка</h1>
+                <p>Управление доступом, ролями и обзор того, кто лайкнул какой пост. Панель открывается только для пользователей с ролью <strong>admin</strong>.</p>
+            </div>
+            <div class="hero-actions">
+                <span id="adminIdentity" class="chip hidden"></span>
+                <a id="homeLink" class="btn-link" href="/">На главную</a>
+                <button id="refreshButton" class="btn btn-secondary hidden" type="button">Обновить</button>
+                <button id="logoutButton" class="btn btn-primary hidden" type="button">Выйти</button>
+            </div>
+        </header>
+
+        <div id="loadingState" class="panel state">
+            <h2>Загружаю админку</h2>
+            <p>Проверяю авторизацию и подготавливаю данные по пользователям и лайкам.</p>
+        </div>
+
+        <div id="authState" class="panel state hidden">
+            <h2>Нужна авторизация</h2>
+            <p>Сначала войдите в приложение, а затем снова откройте страницу администрирования.</p>
+        </div>
+
+        <div id="forbiddenState" class="panel state hidden">
+            <h2>Доступ запрещён</h2>
+            <p id="forbiddenMessage">доступ только для администратора</p>
+        </div>
+
+        <div id="adminState" class="hidden">
+            <div id="adminNotice" class="notice hidden"></div>
+            <div class="layout">
+                <section class="panel section">
+                    <div class="section-title">
+                        <div>
+                            <h2>Все пользователи</h2>
+                            <p>Добавляйте доступ, повышайте до admin и снимайте доступ без похода в БД.</p>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Пользователь</th>
+                                    <th>Посты</th>
+                                    <th>Статус</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="panel section">
+                    <div class="section-title">
+                        <div>
+                            <h2>Лайки по постам</h2>
+                            <p>Сводка по всем постам, у которых уже есть лайки.</p>
+                        </div>
+                    </div>
+                    <div id="likesList" class="likes-list"></div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const ROLE_USER = "user";
+        const ROLE_ADMIN = "admin";
+        const ADMIN_DENIED_MESSAGE = "доступ только для администратора";
+
+        let currentUser = null;
+
+        const API_BASE = resolveBasePath();
+        const homeHref = buildPath("/");
+
+        document.getElementById("homeLink").href = homeHref;
+        document.getElementById("refreshButton").addEventListener("click", () => {
+            loadAdminData();
+        });
+        document.getElementById("logoutButton").addEventListener("click", logout);
+
+        function resolveBasePath() {
+            const path = window.location.pathname || "/";
+            const suffixes = ["/admin.html", "/admin/", "/admin"];
+
+            for (const suffix of suffixes) {
+                if (path === suffix) {
+                    return "";
+                }
+                if (path.endsWith(suffix)) {
+                    return path.slice(0, -suffix.length);
+                }
+            }
+
+            if (path === "/") {
+                return "";
+            }
+
+            return path.endsWith("/") ? path.slice(0, -1) : path;
+        }
+
+        function buildPath(path) {
+            return `${API_BASE}${path}`;
+        }
+
+        function resolveMediaUrl(url) {
+            if (!url) {
+                return "";
+            }
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                return url;
+            }
+            return `${API_BASE}${url}`;
+        }
+
+        function esc(value) {
+            const div = document.createElement("div");
+            div.textContent = value == null ? "" : String(value);
+            return div.innerHTML;
+        }
+
+        function fmt(value) {
+            if (!value) {
+                return "—";
+            }
+            return new Date(value).toLocaleString("ru-RU", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+        }
+
+        function showState(stateId) {
+            ["loadingState", "authState", "forbiddenState", "adminState"].forEach((id) => {
+                document.getElementById(id).classList.toggle("hidden", id !== stateId);
+            });
+        }
+
+        function setNotice(message, isError = false) {
+            const node = document.getElementById("adminNotice");
+            if (!message) {
+                node.classList.add("hidden");
+                node.classList.remove("error");
+                node.textContent = "";
+                return;
+            }
+            node.textContent = message;
+            node.classList.remove("hidden");
+            node.classList.toggle("error", isError);
+        }
+
+        function showAuthState() {
+            currentUser = null;
+            showState("authState");
+            document.getElementById("adminIdentity").classList.add("hidden");
+            document.getElementById("refreshButton").classList.add("hidden");
+            document.getElementById("logoutButton").classList.add("hidden");
+        }
+
+        function showForbiddenState(message) {
+            showState("forbiddenState");
+            document.getElementById("forbiddenMessage").textContent = message || ADMIN_DENIED_MESSAGE;
+            document.getElementById("adminIdentity").classList.add("hidden");
+            document.getElementById("refreshButton").classList.add("hidden");
+            document.getElementById("logoutButton").classList.add("hidden");
+        }
+
+        function showAdminState() {
+            showState("adminState");
+            document.getElementById("adminIdentity").textContent = `admin: ${currentUser.username}`;
+            document.getElementById("adminIdentity").classList.remove("hidden");
+            document.getElementById("refreshButton").classList.remove("hidden");
+            document.getElementById("logoutButton").classList.remove("hidden");
+        }
+
+        async function api(endpoint, options = {}) {
+            try {
+                const headers = { ...(options.headers || {}) };
+                if (!(options.body instanceof FormData)) {
+                    headers["Content-Type"] = headers["Content-Type"] || "application/json";
+                }
+
+                const response = await fetch(`${API_BASE}/api${endpoint}`, {
+                    ...options,
+                    headers,
+                    credentials: "include"
+                });
+                const payload = await response.json().catch(() => ({ success: false, message: "Неожиданный ответ сервера" }));
+                if (payload && typeof payload === "object") {
+                    payload.status = response.status;
+                }
+
+                if (response.status === 401) {
+                    showAuthState();
+                } else if (response.status === 403 && payload.message === ADMIN_DENIED_MESSAGE) {
+                    showForbiddenState(payload.message);
+                }
+
+                return payload;
+            } catch (error) {
+                console.error("Admin API request failed", error);
+                return { success: false, message: "Ошибка сети" };
+            }
+        }
+
+        async function logout() {
+            await api("/logout", { method: "POST" });
+            window.location.href = homeHref;
+        }
+
+        async function bootstrap() {
+            const meResponse = await api("/me");
+            if (!meResponse.success || !meResponse.data) {
+                if (meResponse.status === 401) {
+                    showAuthState();
+                    return;
+                }
+                showForbiddenState("Не удалось загрузить пользователя");
+                return;
+            }
+
+            currentUser = meResponse.data;
+            if (currentUser.role !== ROLE_ADMIN) {
+                showForbiddenState(ADMIN_DENIED_MESSAGE);
+                return;
+            }
+
+            showAdminState();
+            await loadAdminData();
+        }
+
+        async function loadAdminData() {
+            if (!currentUser || currentUser.role !== ROLE_ADMIN) {
+                return;
+            }
+
+            setNotice("");
+            const [usersResponse, likesResponse] = await Promise.all([
+                api("/admin/users"),
+                api("/admin/likes")
+            ]);
+
+            if (!usersResponse.success || !likesResponse.success) {
+                if (usersResponse.status === 401 || likesResponse.status === 401) {
+                    showAuthState();
+                    return;
+                }
+                if (usersResponse.status === 403 || likesResponse.status === 403) {
+                    showForbiddenState(ADMIN_DENIED_MESSAGE);
+                    return;
+                }
+                setNotice(usersResponse.message || likesResponse.message || "Не удалось загрузить данные админки", true);
+                return;
+            }
+
+            renderUsers(usersResponse.data || []);
+            renderLikes(likesResponse.data || []);
+        }
+
+        function roleLabel(user) {
+            if (!user.is_allowed) {
+                return '<span class="role-pill guest">не разрешён</span>';
+            }
+            if (user.role === ROLE_ADMIN) {
+                return '<span class="role-pill admin">admin</span>';
+            }
+            return '<span class="role-pill user">user</span>';
+        }
+
+        function renderUsers(users) {
+            const tbody = document.getElementById("usersTableBody");
+            if (!users.length) {
+                tbody.innerHTML = '<tr><td colspan="4"><div class="empty">Пользователей пока нет.</div></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = users.map((user) => {
+                const meta = `<div class="user-meta">id ${user.id} · создан ${fmt(user.created_at)}</div>`;
+                const actions = renderUserActions(user);
+                return `
+                    <tr>
+                        <td><strong>${esc(user.username)}</strong>${meta}</td>
+                        <td>${user.post_count}</td>
+                        <td>${roleLabel(user)}</td>
+                        <td><div class="actions">${actions}</div></td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function renderUserActions(user) {
+            if (!user.is_allowed) {
+                return `<button class="btn btn-primary" type="button" onclick="allowUser(${user.id})">Разрешить</button>`;
+            }
+            if (user.role === ROLE_ADMIN) {
+                return `<button class="btn btn-secondary" type="button" onclick="changeRole(${user.id}, '${ROLE_USER}')">Сделать user</button>`;
+            }
+            return [
+                `<button class="btn btn-primary" type="button" onclick="changeRole(${user.id}, '${ROLE_ADMIN}')">Сделать admin</button>`,
+                `<button class="btn btn-danger" type="button" onclick="removeAllowedUser(${user.id})">Удалить доступ</button>`
+            ].join("");
+        }
+
+        function renderLikes(posts) {
+            const container = document.getElementById("likesList");
+            if (!posts.length) {
+                container.innerHTML = '<div class="empty">Пока никто ничего не лайкал.</div>';
+                return;
+            }
+
+            container.innerHTML = posts.map((post) => {
+                const content = post.content ? esc(post.content) : '<span style="color:rgba(238,252,255,0.54);">Пост без текста</span>';
+                const flags = [
+                    `<span class="flag">Лайков: ${post.like_count}</span>`,
+                    post.image_url ? '<span class="flag">Есть картинка</span>' : ''
+                ].join("");
+                const likedUsers = post.liked_users.map((user) => `
+                    <div class="liked-user">
+                        <strong>${esc(user.username)}</strong>
+                        <time>${fmt(user.liked_at)}</time>
+                    </div>
+                `).join("");
+
+                return `
+                    <article class="post-card">
+                        <h3>Пост #${post.post_id} · ${esc(post.author_username)}</h3>
+                        <div class="post-meta">${fmt(post.created_at)}</div>
+                        <div class="post-content">${content}</div>
+                        <div class="post-flags">${flags}</div>
+                        <div class="liked-users">${likedUsers}</div>
+                    </article>
+                `;
+            }).join("");
+        }
+
+        async function allowUser(userId) {
+            await mutateAdminData(`/admin/allowed-users`, "POST", { user_id: Number(userId) }, "Пользователь добавлен в разрешенные");
+        }
+
+        async function changeRole(userId, role) {
+            const label = role === ROLE_ADMIN ? "Пользователь повышен до admin" : "Администратор понижен до user";
+            await mutateAdminData(`/admin/allowed-users/${Number(userId)}/role`, "PATCH", { role }, label);
+        }
+
+        async function removeAllowedUser(userId) {
+            await mutateAdminData(`/admin/allowed-users/${Number(userId)}`, "DELETE", null, "Доступ пользователя удалён");
+        }
+
+        async function mutateAdminData(endpoint, method, payload, successMessage) {
+            setNotice("");
+            const response = await api(endpoint, {
+                method,
+                body: payload ? JSON.stringify(payload) : undefined
+            });
+
+            if (!response.success) {
+                if (response.status !== 401 && response.status !== 403) {
+                    setNotice(response.message || "Операция не выполнена", true);
+                }
+                return;
+            }
+
+            setNotice(successMessage);
+            await loadAdminData();
+        }
+
+        bootstrap();
+    </script>
+</body>
+</html>

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -42,11 +43,18 @@ func TestInitDBMigratesExistingPostsSchema(t *testing.T) {
 		"CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
 		"CREATE TABLE posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id))",
 		"CREATE TABLE likes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, post_id INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (post_id) REFERENCES posts(id), UNIQUE(user_id, post_id))",
+		"CREATE TABLE allowed_users (user_id INTEGER PRIMARY KEY, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)",
 	}
 	for _, statement := range legacyStatements {
 		if _, err := legacyDB.Exec(statement); err != nil {
 			t.Fatalf("prepare legacy schema: %v", err)
 		}
+	}
+	if _, err := legacyDB.Exec("INSERT INTO users (username, password) VALUES ('legacy-admin', 'hash')"); err != nil {
+		t.Fatalf("insert legacy user: %v", err)
+	}
+	if _, err := legacyDB.Exec("INSERT INTO allowed_users (user_id) VALUES (1)"); err != nil {
+		t.Fatalf("insert legacy allowlist: %v", err)
 	}
 
 	if err := initDB(); err != nil {
@@ -58,8 +66,15 @@ func TestInitDBMigratesExistingPostsSchema(t *testing.T) {
 		t.Fatalf("expected migrated posts columns, got %+v", columns)
 	}
 	allowedColumns := tableColumns(t, legacyDB, "allowed_users")
-	if !allowedColumns["user_id"] || !allowedColumns["created_at"] {
+	if !allowedColumns["user_id"] || !allowedColumns["created_at"] || !allowedColumns["role"] {
 		t.Fatalf("expected allowed_users table to be created, got %+v", allowedColumns)
+	}
+	var legacyRole string
+	if err := legacyDB.QueryRow("SELECT role FROM allowed_users WHERE user_id = 1").Scan(&legacyRole); err != nil {
+		t.Fatalf("query migrated allowlist role: %v", err)
+	}
+	if legacyRole != string(roleUser) {
+		t.Fatalf("expected migrated allowlist role to default to %q, got %q", roleUser, legacyRole)
 	}
 
 	if !hasIndex(t, legacyDB, "posts", "idx_posts_image_expires_at") {
@@ -74,7 +89,8 @@ func TestRegisterCreatePostAndToggleLike(t *testing.T) {
 	alice := newSessionClient(t)
 	registerUser(t, alice, server.URL, "alice", "secret12")
 	allowUserByUsername(t, "alice")
-	if !fetchMe(t, alice, server.URL).IsAllowed {
+	aliceMe := fetchMe(t, alice, server.URL)
+	if !aliceMe.IsAllowed || aliceMe.Role != string(roleUser) {
 		t.Fatalf("expected alice to be allowed after allowlist insert")
 	}
 	post := createPostForTest(t, alice, server.URL, "Первый локальный пост")
@@ -82,7 +98,8 @@ func TestRegisterCreatePostAndToggleLike(t *testing.T) {
 	bob := newSessionClient(t)
 	registerUser(t, bob, server.URL, "bob", "secret12")
 	allowUserByUsername(t, "bob")
-	if !fetchMe(t, bob, server.URL).IsAllowed {
+	bobMe := fetchMe(t, bob, server.URL)
+	if !bobMe.IsAllowed || bobMe.Role != string(roleUser) {
 		t.Fatalf("expected bob to be allowed after allowlist insert")
 	}
 
@@ -245,6 +262,9 @@ func TestUnallowedUserCannotUseProtectedAPI(t *testing.T) {
 	if me.IsAllowed {
 		t.Fatalf("expected blocked user to stay disallowed, got %+v", me)
 	}
+	if me.Role != "" {
+		t.Fatalf("expected blocked user to have empty role, got %q", me.Role)
+	}
 	if me.AccessMessage != accessDeniedMessage {
 		t.Fatalf("expected access denied message %q, got %q", accessDeniedMessage, me.AccessMessage)
 	}
@@ -253,6 +273,139 @@ func TestUnallowedUserCannotUseProtectedAPI(t *testing.T) {
 	assertForbiddenJSON(t, blocked, http.MethodGet, server.URL+"/api/posts", nil)
 	assertForbiddenJSON(t, blocked, http.MethodPost, server.URL+"/api/posts", map[string]string{"content": "Не должен сохраниться"})
 	assertForbiddenJSON(t, blocked, http.MethodPost, server.URL+"/api/like", map[string]int64{"post_id": post.ID})
+}
+
+func TestAdminEndpointsRequireAdminRole(t *testing.T) {
+	server := setupTestServer(t)
+	defer server.Close()
+
+	guest := newSessionClient(t)
+	assertJSONStatus(t, guest, http.MethodGet, server.URL+"/api/admin/users", nil, http.StatusUnauthorized)
+
+	allowedUser := newSessionClient(t)
+	registerUser(t, allowedUser, server.URL, "regular", "secret12")
+	allowUserByUsername(t, "regular")
+	me := fetchMe(t, allowedUser, server.URL)
+	if me.Role != string(roleUser) {
+		t.Fatalf("expected regular user role %q, got %q", roleUser, me.Role)
+	}
+
+	var response apiResponse
+	status := requestJSONStatus(t, allowedUser, http.MethodGet, server.URL+"/api/admin/users", nil, &response)
+	if status != http.StatusForbidden {
+		t.Fatalf("expected admin endpoint to return 403 for non-admin, got %d", status)
+	}
+	if response.Message != adminDeniedMessage {
+		t.Fatalf("expected admin denied message %q, got %q", adminDeniedMessage, response.Message)
+	}
+}
+
+func TestAdminCanManageUsersAndLikes(t *testing.T) {
+	server := setupTestServer(t)
+	defer server.Close()
+
+	adminClient := newSessionClient(t)
+	registerUser(t, adminClient, server.URL, "captain", "secret12")
+	allowUserByUsernameAs(t, "captain", roleAdmin)
+
+	captainMe := fetchMe(t, adminClient, server.URL)
+	if captainMe.Role != string(roleAdmin) {
+		t.Fatalf("expected captain role %q, got %q", roleAdmin, captainMe.Role)
+	}
+
+	author := newSessionClient(t)
+	registerUser(t, author, server.URL, "author", "secret12")
+	allowUserByUsername(t, "author")
+	post := createPostForTest(t, author, server.URL, "Пост для админской аналитики")
+
+	liker := newSessionClient(t)
+	registerUser(t, liker, server.URL, "liker", "secret12")
+	allowUserByUsername(t, "liker")
+	likePostForTest(t, liker, server.URL, post.ID)
+
+	candidate := newSessionClient(t)
+	registerUser(t, candidate, server.URL, "candidate", "secret12")
+	candidateID := userIDByUsername(t, "candidate")
+
+	initialUsers := fetchAdminUsers(t, adminClient, server.URL)
+	if findAdminUser(initialUsers, userIDByUsername(t, "captain")).Role != string(roleAdmin) {
+		t.Fatalf("expected admin list to include captain as admin")
+	}
+
+	addedUser := addAllowedUserForTest(t, adminClient, server.URL, candidateID)
+	if !addedUser.IsAllowed || addedUser.Role != string(roleUser) {
+		t.Fatalf("expected candidate to be added as user, got %+v", addedUser)
+	}
+
+	promotedUser := updateAllowedRoleForTest(t, adminClient, server.URL, candidateID, roleAdmin)
+	if promotedUser.Role != string(roleAdmin) {
+		t.Fatalf("expected candidate to become admin, got %+v", promotedUser)
+	}
+
+	assertJSONStatus(t, adminClient, http.MethodDelete, server.URL+"/api/admin/allowed-users/"+strconv.FormatInt(candidateID, 10), nil, http.StatusConflict)
+
+	demotedUser := updateAllowedRoleForTest(t, adminClient, server.URL, candidateID, roleUser)
+	if demotedUser.Role != string(roleUser) {
+		t.Fatalf("expected candidate to be demoted to user, got %+v", demotedUser)
+	}
+
+	deleteAllowedUserForTest(t, adminClient, server.URL, candidateID)
+	usersAfterDelete := fetchAdminUsers(t, adminClient, server.URL)
+	if findAdminUser(usersAfterDelete, candidateID).IsAllowed {
+		t.Fatalf("expected candidate to be removed from allowlist")
+	}
+
+	likes := fetchAdminLikes(t, adminClient, server.URL)
+	postLikes := findAdminPostLikes(likes, post.ID)
+	if postLikes.PostID == 0 {
+		t.Fatalf("expected admin likes view to include post %d", post.ID)
+	}
+	if postLikes.LikeCount != 1 {
+		t.Fatalf("expected 1 like in admin likes view, got %+v", postLikes)
+	}
+	if len(postLikes.LikedUsers) != 1 || postLikes.LikedUsers[0].Username != "liker" {
+		t.Fatalf("expected liker to appear in admin likes view, got %+v", postLikes)
+	}
+}
+
+func TestAdminCannotDemoteLastAdmin(t *testing.T) {
+	server := setupTestServer(t)
+	defer server.Close()
+
+	adminClient := newSessionClient(t)
+	registerUser(t, adminClient, server.URL, "solo", "secret12")
+	allowUserByUsernameAs(t, "solo", roleAdmin)
+	soloID := userIDByUsername(t, "solo")
+
+	var response apiResponse
+	status := requestJSONStatus(
+		t,
+		adminClient,
+		http.MethodPatch,
+		server.URL+"/api/admin/allowed-users/"+strconv.FormatInt(soloID, 10)+"/role",
+		map[string]string{"role": string(roleUser)},
+		&response,
+	)
+	if status != http.StatusConflict {
+		t.Fatalf("expected last-admin demotion to return 409, got %d with %+v", status, response)
+	}
+	if !strings.Contains(response.Message, "последнего администратора") {
+		t.Fatalf("expected last-admin guard message, got %q", response.Message)
+	}
+}
+
+func TestAdminRouteServesPage(t *testing.T) {
+	server := setupTestServer(t)
+	defer server.Close()
+
+	client := newSessionClient(t)
+	body, status := getBinary(t, client, server.URL+"/admin")
+	if status != http.StatusOK {
+		t.Fatalf("expected /admin to return 200, got %d", status)
+	}
+	if !bytes.Contains(body, []byte("Админка Кузовка")) {
+		t.Fatalf("expected /admin page to contain admin title")
+	}
 }
 
 func setupTestServer(t *testing.T) *httptest.Server {
@@ -519,14 +672,27 @@ func fetchMe(t *testing.T, client *http.Client, baseURL string) MeResponse {
 func allowUserByUsername(t *testing.T, username string) {
 	t.Helper()
 
-	var userID int64
-	if err := db.QueryRow("SELECT id FROM users WHERE username = ?", username).Scan(&userID); err != nil {
-		t.Fatalf("find user %s for allowlist: %v", username, err)
-	}
+	allowUserByUsernameAs(t, username, roleUser)
+}
 
-	if _, err := db.Exec("INSERT INTO allowed_users (user_id) VALUES (?)", userID); err != nil {
+func allowUserByUsernameAs(t *testing.T, username string, role AllowedRole) {
+	t.Helper()
+
+	userID := userIDByUsername(t, username)
+
+	if _, err := db.Exec("INSERT INTO allowed_users (user_id, role) VALUES (?, ?)", userID, string(role)); err != nil {
 		t.Fatalf("allow user %s: %v", username, err)
 	}
+}
+
+func userIDByUsername(t *testing.T, username string) int64 {
+	t.Helper()
+
+	var userID int64
+	if err := db.QueryRow("SELECT id FROM users WHERE username = ?", username).Scan(&userID); err != nil {
+		t.Fatalf("find user %s: %v", username, err)
+	}
+	return userID
 }
 
 func assertForbiddenJSON(t *testing.T, client *http.Client, method, url string, payload interface{}) {
@@ -543,6 +709,118 @@ func assertForbiddenJSON(t *testing.T, client *http.Client, method, url string, 
 	if response.Message != accessDeniedMessage {
 		t.Fatalf("expected forbidden message %q, got %q", accessDeniedMessage, response.Message)
 	}
+}
+
+func assertJSONStatus(t *testing.T, client *http.Client, method, url string, payload interface{}, expected int) apiResponse {
+	t.Helper()
+
+	var response apiResponse
+	status := requestJSONStatus(t, client, method, url, payload, &response)
+	if status != expected {
+		t.Fatalf("expected status %d for %s %s, got %d with response %+v", expected, method, url, status, response)
+	}
+	return response
+}
+
+func fetchAdminUsers(t *testing.T, client *http.Client, baseURL string) []AdminUserSummary {
+	t.Helper()
+
+	var response apiResponse
+	requestJSON(t, client, http.MethodGet, baseURL+"/api/admin/users", nil, &response)
+	if !response.Success {
+		t.Fatalf("fetch admin users failed: %s", response.Message)
+	}
+
+	var users []AdminUserSummary
+	if err := json.Unmarshal(response.Data, &users); err != nil {
+		t.Fatalf("decode admin users: %v", err)
+	}
+	return users
+}
+
+func fetchAdminLikes(t *testing.T, client *http.Client, baseURL string) []AdminPostLikes {
+	t.Helper()
+
+	var response apiResponse
+	requestJSON(t, client, http.MethodGet, baseURL+"/api/admin/likes", nil, &response)
+	if !response.Success {
+		t.Fatalf("fetch admin likes failed: %s", response.Message)
+	}
+
+	var likes []AdminPostLikes
+	if err := json.Unmarshal(response.Data, &likes); err != nil {
+		t.Fatalf("decode admin likes: %v", err)
+	}
+	return likes
+}
+
+func addAllowedUserForTest(t *testing.T, client *http.Client, baseURL string, userID int64) AdminUserSummary {
+	t.Helper()
+
+	var response apiResponse
+	requestJSON(t, client, http.MethodPost, baseURL+"/api/admin/allowed-users", map[string]int64{
+		"user_id": userID,
+	}, &response)
+	if !response.Success {
+		t.Fatalf("add allowed user failed: %s", response.Message)
+	}
+
+	var user AdminUserSummary
+	if err := json.Unmarshal(response.Data, &user); err != nil {
+		t.Fatalf("decode allowed user response: %v", err)
+	}
+	return user
+}
+
+func updateAllowedRoleForTest(t *testing.T, client *http.Client, baseURL string, userID int64, role AllowedRole) AdminUserSummary {
+	t.Helper()
+
+	var response apiResponse
+	requestJSON(
+		t,
+		client,
+		http.MethodPatch,
+		baseURL+"/api/admin/allowed-users/"+strconv.FormatInt(userID, 10)+"/role",
+		map[string]string{"role": string(role)},
+		&response,
+	)
+	if !response.Success {
+		t.Fatalf("update allowed role failed: %s", response.Message)
+	}
+
+	var user AdminUserSummary
+	if err := json.Unmarshal(response.Data, &user); err != nil {
+		t.Fatalf("decode updated role response: %v", err)
+	}
+	return user
+}
+
+func deleteAllowedUserForTest(t *testing.T, client *http.Client, baseURL string, userID int64) {
+	t.Helper()
+
+	var response apiResponse
+	requestJSON(t, client, http.MethodDelete, baseURL+"/api/admin/allowed-users/"+strconv.FormatInt(userID, 10), nil, &response)
+	if !response.Success {
+		t.Fatalf("delete allowed user failed: %s", response.Message)
+	}
+}
+
+func findAdminUser(users []AdminUserSummary, userID int64) AdminUserSummary {
+	for _, user := range users {
+		if user.ID == userID {
+			return user
+		}
+	}
+	return AdminUserSummary{}
+}
+
+func findAdminPostLikes(posts []AdminPostLikes, postID int64) AdminPostLikes {
+	for _, post := range posts {
+		if post.PostID == postID {
+			return post
+		}
+	}
+	return AdminPostLikes{}
 }
 
 func tableColumns(t *testing.T, database *sql.DB, table string) map[string]bool {

@@ -36,7 +36,9 @@ if (strpos($request_uri, '/img/') === 0) {
     exit;
 }
 
-if ($request_uri === '/' || $request_uri === '/index.html') {
+if ($request_uri === '/admin' || $request_uri === '/admin/' || $request_uri === '/admin.html') {
+    $file_path = $static_dir . '/admin.html';
+} elseif ($request_uri === '/' || $request_uri === '/index.html') {
     $file_path = $static_dir . '/index.html';
 } else {
     $file_path = $static_dir . $request_uri;

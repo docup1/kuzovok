@@ -12,7 +12,7 @@ GOOS ?= freebsd
 GOARCH ?= amd64
 CGO_ENABLED ?= 0
 
-.PHONY: all build clean fmt freebsd run run-backend run-proxy test
+.PHONY: all build clean fmt freebsd run run-backend run-proxy run-prod test
 
 all: build
 
@@ -38,6 +38,12 @@ run-backend:
 run-proxy:
 	@echo "🌐 PHP прокси на http://$(PROXY_ADDR)"
 	KUSOVOK_BACKEND_URL=http://$(LOCAL_ADDR) $(PHP) -S $(PROXY_ADDR) index.php
+
+run-prod:
+	@echo "🛑 Остановка запущенного ./$(BINARY_NAME), если он уже работает..."
+	-pkill -f '(^|[[:space:]])\./$(BINARY_NAME)([[:space:]]|$$)'
+	@echo "🚀 Запуск ./$(BINARY_NAME) в фоне, лог: $(BINARY_NAME).log"
+	nohup ./$(BINARY_NAME) > $(BINARY_NAME).log 2>&1 &
 
 freebsd:
 	@echo "🔨 Сборка под FreeBSD ($(GOARCH))..."

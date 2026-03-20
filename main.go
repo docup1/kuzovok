@@ -29,6 +29,7 @@ const (
 	maxMultipartBodySize = maxImageSize + (1 << 20)
 	cleanupInterval      = time.Minute
 	accessDeniedMessage  = "извините, вы пока не кузовок"
+	adminDeniedMessage   = "доступ только для администратора"
 )
 
 var (
@@ -55,6 +56,13 @@ type User struct {
 	Password string `json:"-"`
 }
 
+type AllowedRole string
+
+const (
+	roleUser  AllowedRole = "user"
+	roleAdmin AllowedRole = "admin"
+)
+
 type Post struct {
 	ID             int64      `json:"id"`
 	UserID         int64      `json:"user_id"`
@@ -72,7 +80,38 @@ type MeResponse struct {
 	Username      string `json:"username"`
 	PostCount     int    `json:"post_count"`
 	IsAllowed     bool   `json:"is_allowed"`
+	Role          string `json:"role"`
 	AccessMessage string `json:"access_message"`
+}
+
+type AccessInfo struct {
+	IsAllowed bool
+	Role      AllowedRole
+}
+
+type AdminUserSummary struct {
+	ID        int64  `json:"id"`
+	Username  string `json:"username"`
+	CreatedAt string `json:"created_at"`
+	PostCount int    `json:"post_count"`
+	IsAllowed bool   `json:"is_allowed"`
+	Role      string `json:"role"`
+}
+
+type AdminLikedUser struct {
+	UserID   int64  `json:"user_id"`
+	Username string `json:"username"`
+	LikedAt  string `json:"liked_at"`
+}
+
+type AdminPostLikes struct {
+	PostID         int64            `json:"post_id"`
+	AuthorUsername string           `json:"author_username"`
+	Content        string           `json:"content"`
+	ImageURL       *string          `json:"image_url"`
+	CreatedAt      string           `json:"created_at"`
+	LikeCount      int              `json:"like_count"`
+	LikedUsers     []AdminLikedUser `json:"liked_users"`
 }
 
 type Claims struct {
@@ -160,7 +199,7 @@ func initDB() error {
 		"CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
 		"CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id))",
 		"CREATE TABLE IF NOT EXISTS likes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, post_id INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (post_id) REFERENCES posts(id), UNIQUE(user_id, post_id))",
-		"CREATE TABLE IF NOT EXISTS allowed_users (user_id INTEGER PRIMARY KEY, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)",
+		"CREATE TABLE IF NOT EXISTS allowed_users (user_id INTEGER PRIMARY KEY, role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'admin')), created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)",
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
@@ -169,6 +208,9 @@ func initDB() error {
 	}
 
 	if err := ensurePostImageColumns(); err != nil {
+		return err
+	}
+	if err := ensureAllowedUsersRoleColumn(); err != nil {
 		return err
 	}
 	_, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_posts_image_expires_at ON posts(image_expires_at)")
@@ -210,6 +252,40 @@ func ensurePostImageColumns() error {
 		}
 	}
 	return nil
+}
+
+func ensureAllowedUsersRoleColumn() error {
+	rows, err := db.Query("PRAGMA table_info(allowed_users)")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name string
+		var dataType string
+		var notNull int
+		var defaultValue sql.NullString
+		var primaryKey int
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return err
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	if !columns["role"] {
+		if _, err := db.Exec("ALTER TABLE allowed_users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'"); err != nil {
+			return err
+		}
+	}
+
+	_, err = db.Exec("UPDATE allowed_users SET role = ? WHERE role IS NULL OR role = ''", string(roleUser))
+	return err
 }
 
 func ensureImageDir() error {
@@ -283,6 +359,10 @@ func cleanupExpiredImages(now time.Time) error {
 func newServerMux() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/img/", imageHandler)
+	mux.HandleFunc("/api/admin/users", authMiddleware(requireAdminUser(adminUsersHandler)))
+	mux.HandleFunc("/api/admin/likes", authMiddleware(requireAdminUser(adminLikesHandler)))
+	mux.HandleFunc("/api/admin/allowed-users", authMiddleware(requireAdminUser(adminAllowedUsersHandler)))
+	mux.HandleFunc("/api/admin/allowed-users/", authMiddleware(requireAdminUser(adminAllowedUserItemHandler)))
 	mux.HandleFunc("/", staticHandler)
 	mux.HandleFunc("/api/register", registerHandler)
 	mux.HandleFunc("/api/login", loginHandler)
@@ -337,6 +417,10 @@ func imageHandler(w http.ResponseWriter, r *http.Request) {
 func staticHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 		http.ServeFile(w, r, "static/index.html")
+		return
+	}
+	if r.URL.Path == "/admin" || r.URL.Path == "/admin/" || r.URL.Path == "/admin.html" {
+		http.ServeFile(w, r, "static/admin.html")
 		return
 	}
 	http.ServeFile(w, r, "static"+r.URL.Path)
@@ -412,13 +496,13 @@ func requireAllowedUser(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		allowed, err := isUserAllowed(userID)
+		access, err := getAccessInfo(userID)
 		if err != nil {
 			log.Printf("Allowlist check error for user %d: %v", userID, err)
 			writeError(w, http.StatusInternalServerError, "Ошибка сервера")
 			return
 		}
-		if !allowed {
+		if !access.IsAllowed {
 			writeError(w, http.StatusForbidden, accessDeniedMessage)
 			return
 		}
@@ -427,12 +511,56 @@ func requireAllowedUser(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func isUserAllowed(userID int64) (bool, error) {
-	var allowed int
-	if err := db.QueryRow("SELECT COUNT(*) FROM allowed_users WHERE user_id = ?", userID).Scan(&allowed); err != nil {
-		return false, err
+func requireAdminUser(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, err := strconv.ParseInt(r.Header.Get("X-User-ID"), 10, 64)
+		if err != nil || userID <= 0 {
+			writeError(w, http.StatusUnauthorized, "Требуется авторизация")
+			return
+		}
+
+		access, err := getAccessInfo(userID)
+		if err != nil {
+			log.Printf("Admin access check error for user %d: %v", userID, err)
+			writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+			return
+		}
+		if !access.IsAllowed || access.Role != roleAdmin {
+			writeError(w, http.StatusForbidden, adminDeniedMessage)
+			return
+		}
+
+		next(w, r)
 	}
-	return allowed > 0, nil
+}
+
+func getAccessInfo(userID int64) (AccessInfo, error) {
+	var role sql.NullString
+	err := db.QueryRow("SELECT role FROM allowed_users WHERE user_id = ?", userID).Scan(&role)
+	if err == sql.ErrNoRows {
+		return AccessInfo{IsAllowed: false}, nil
+	}
+	if err != nil {
+		return AccessInfo{}, err
+	}
+
+	allowedRole, err := parseAllowedRole(role.String)
+	if err != nil {
+		return AccessInfo{}, err
+	}
+
+	return AccessInfo{IsAllowed: true, Role: allowedRole}, nil
+}
+
+func parseAllowedRole(role string) (AllowedRole, error) {
+	switch AllowedRole(strings.TrimSpace(role)) {
+	case "", roleUser:
+		return roleUser, nil
+	case roleAdmin:
+		return roleAdmin, nil
+	default:
+		return "", fmt.Errorf("invalid allowed role: %s", role)
+	}
 }
 
 func registerHandler(w http.ResponseWriter, r *http.Request) {
@@ -523,7 +651,7 @@ func meHandler(w http.ResponseWriter, r *http.Request) {
 	var postCount int
 	_ = db.QueryRow("SELECT COUNT(*) FROM posts WHERE user_id = ?", userID).Scan(&postCount)
 
-	isAllowed, err := isUserAllowed(userID)
+	access, err := getAccessInfo(userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
 		return
@@ -533,13 +661,229 @@ func meHandler(w http.ResponseWriter, r *http.Request) {
 		ID:        userID,
 		Username:  username,
 		PostCount: postCount,
-		IsAllowed: isAllowed,
+		IsAllowed: access.IsAllowed,
+		Role:      string(access.Role),
 	}
-	if !isAllowed {
+	if !access.IsAllowed {
 		response.AccessMessage = accessDeniedMessage
 	}
 
 	writeSuccess(w, "", response)
+}
+
+func adminUsersHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "Метод не разрешен")
+		return
+	}
+
+	users, err := queryAdminUsers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+
+	writeSuccess(w, "", users)
+}
+
+func adminLikesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "Метод не разрешен")
+		return
+	}
+
+	likes, err := queryAdminLikes()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+
+	writeSuccess(w, "", likes)
+}
+
+func adminAllowedUsersHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "Метод не разрешен")
+		return
+	}
+
+	var req struct {
+		UserID int64  `json:"user_id"`
+		Role   string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Неверный формат данных")
+		return
+	}
+	if req.UserID <= 0 {
+		writeError(w, http.StatusBadRequest, "Неверный идентификатор пользователя")
+		return
+	}
+
+	role := roleUser
+	if strings.TrimSpace(req.Role) != "" {
+		var err error
+		role, err = parseAllowedRole(req.Role)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "Недопустимая роль")
+			return
+		}
+	}
+
+	exists, err := userExists(req.UserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+	if !exists {
+		writeError(w, http.StatusNotFound, "Пользователь не найден")
+		return
+	}
+
+	if _, err := db.Exec("INSERT INTO allowed_users (user_id, role) VALUES (?, ?)", req.UserID, string(role)); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			writeError(w, http.StatusConflict, "Пользователь уже добавлен в разрешенные")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+
+	user, err := queryAdminUserByID(req.UserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+
+	writeSuccess(w, "Пользователь добавлен в разрешенные", user)
+}
+
+func adminAllowedUserItemHandler(w http.ResponseWriter, r *http.Request) {
+	const prefix = "/api/admin/allowed-users/"
+
+	pathValue := strings.TrimPrefix(r.URL.Path, prefix)
+	pathValue = strings.Trim(pathValue, "/")
+	if pathValue == "" {
+		writeError(w, http.StatusNotFound, "Маршрут не найден")
+		return
+	}
+
+	parts := strings.Split(pathValue, "/")
+	userID, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || userID <= 0 {
+		writeError(w, http.StatusBadRequest, "Неверный идентификатор пользователя")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPatch:
+		if len(parts) != 2 || parts[1] != "role" {
+			writeError(w, http.StatusNotFound, "Маршрут не найден")
+			return
+		}
+		updateAllowedUserRole(w, r, userID)
+	case http.MethodDelete:
+		if len(parts) != 1 {
+			writeError(w, http.StatusNotFound, "Маршрут не найден")
+			return
+		}
+		deleteAllowedUser(w, userID)
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "Метод не разрешен")
+	}
+}
+
+func updateAllowedUserRole(w http.ResponseWriter, r *http.Request, userID int64) {
+	var req struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Неверный формат данных")
+		return
+	}
+
+	role, err := parseAllowedRole(req.Role)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Недопустимая роль")
+		return
+	}
+
+	user, err := queryAdminUserByID(userID)
+	if err == sql.ErrNoRows {
+		writeError(w, http.StatusNotFound, "Пользователь не найден")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+	if !user.IsAllowed {
+		writeError(w, http.StatusNotFound, "Пользователь не найден в разрешенных")
+		return
+	}
+
+	currentRole, err := parseAllowedRole(user.Role)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+
+	if currentRole == role {
+		writeSuccess(w, "Роль обновлена", user)
+		return
+	}
+
+	if currentRole == roleAdmin && role == roleUser {
+		adminCount, err := countAdmins()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+			return
+		}
+		if adminCount <= 1 {
+			writeError(w, http.StatusConflict, "Нельзя понизить последнего администратора")
+			return
+		}
+	}
+
+	if _, err := db.Exec("UPDATE allowed_users SET role = ? WHERE user_id = ?", string(role), userID); err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+
+	updatedUser, err := queryAdminUserByID(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+
+	writeSuccess(w, "Роль обновлена", updatedUser)
+}
+
+func deleteAllowedUser(w http.ResponseWriter, userID int64) {
+	user, err := queryAdminUserByID(userID)
+	if err == sql.ErrNoRows {
+		writeError(w, http.StatusNotFound, "Пользователь не найден")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+	if !user.IsAllowed {
+		writeError(w, http.StatusNotFound, "Пользователь не найден в разрешенных")
+		return
+	}
+	if user.Role == string(roleAdmin) {
+		writeError(w, http.StatusConflict, "Сначала понизьте администратора до user")
+		return
+	}
+
+	if _, err := db.Exec("DELETE FROM allowed_users WHERE user_id = ?", userID); err != nil {
+		writeError(w, http.StatusInternalServerError, "Ошибка сервера")
+		return
+	}
+
+	writeSuccess(w, "Пользователь удален из разрешенных", map[string]int64{"user_id": userID})
 }
 
 func postsHandler(w http.ResponseWriter, r *http.Request) {
@@ -824,6 +1168,148 @@ func likeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeSuccess(w, "", map[string]interface{}{"likes": likes, "liked": liked})
+}
+
+func queryAdminUsers() ([]AdminUserSummary, error) {
+	rows, err := db.Query(
+		`SELECT u.id, u.username, u.created_at, COUNT(p.id) AS post_count,
+		        CASE WHEN au.user_id IS NULL THEN 0 ELSE 1 END AS is_allowed,
+		        COALESCE(au.role, '')
+		   FROM users u
+		   LEFT JOIN allowed_users au ON au.user_id = u.id
+		   LEFT JOIN posts p ON p.user_id = u.id
+		  GROUP BY u.id, u.username, u.created_at, au.user_id, au.role
+		  ORDER BY u.created_at DESC, u.id DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	users := []AdminUserSummary{}
+	for rows.Next() {
+		var user AdminUserSummary
+		var createdAt string
+		var isAllowed int
+		var role string
+		if err := rows.Scan(&user.ID, &user.Username, &createdAt, &user.PostCount, &isAllowed, &role); err != nil {
+			return nil, err
+		}
+
+		user.CreatedAt = parseTimestamp(createdAt).Format(time.RFC3339)
+		user.IsAllowed = isAllowed == 1
+		if user.IsAllowed {
+			allowedRole, err := parseAllowedRole(role)
+			if err != nil {
+				return nil, err
+			}
+			user.Role = string(allowedRole)
+		}
+		users = append(users, user)
+	}
+
+	return users, rows.Err()
+}
+
+func queryAdminUserByID(userID int64) (AdminUserSummary, error) {
+	row := db.QueryRow(
+		`SELECT u.id, u.username, u.created_at, COUNT(p.id) AS post_count,
+		        CASE WHEN au.user_id IS NULL THEN 0 ELSE 1 END AS is_allowed,
+		        COALESCE(au.role, '')
+		   FROM users u
+		   LEFT JOIN allowed_users au ON au.user_id = u.id
+		   LEFT JOIN posts p ON p.user_id = u.id
+		  WHERE u.id = ?
+		  GROUP BY u.id, u.username, u.created_at, au.user_id, au.role`,
+		userID,
+	)
+
+	var user AdminUserSummary
+	var createdAt string
+	var isAllowed int
+	var role string
+	if err := row.Scan(&user.ID, &user.Username, &createdAt, &user.PostCount, &isAllowed, &role); err != nil {
+		return AdminUserSummary{}, err
+	}
+
+	user.CreatedAt = parseTimestamp(createdAt).Format(time.RFC3339)
+	user.IsAllowed = isAllowed == 1
+	if user.IsAllowed {
+		allowedRole, err := parseAllowedRole(role)
+		if err != nil {
+			return AdminUserSummary{}, err
+		}
+		user.Role = string(allowedRole)
+	}
+
+	return user, nil
+}
+
+func queryAdminLikes() ([]AdminPostLikes, error) {
+	rows, err := db.Query(
+		`SELECT p.id, author.username, p.content, p.image_url, p.created_at,
+		        liker.id, liker.username, l.created_at
+		   FROM likes l
+		   JOIN posts p ON p.id = l.post_id
+		   JOIN users author ON author.id = p.user_id
+		   JOIN users liker ON liker.id = l.user_id
+		  ORDER BY p.created_at DESC, p.id DESC, l.created_at DESC, l.id DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	posts := []AdminPostLikes{}
+	postIndex := map[int64]int{}
+	for rows.Next() {
+		var (
+			postID         int64
+			authorUsername string
+			content        string
+			imageURL       sql.NullString
+			createdAt      string
+			likedUser      AdminLikedUser
+			likedAt        string
+		)
+		if err := rows.Scan(&postID, &authorUsername, &content, &imageURL, &createdAt, &likedUser.UserID, &likedUser.Username, &likedAt); err != nil {
+			return nil, err
+		}
+		likedUser.LikedAt = parseTimestamp(likedAt).Format(time.RFC3339)
+
+		idx, ok := postIndex[postID]
+		if !ok {
+			postIndex[postID] = len(posts)
+			posts = append(posts, AdminPostLikes{
+				PostID:         postID,
+				AuthorUsername: authorUsername,
+				Content:        content,
+				ImageURL:       nullableStringPointer(imageURL),
+				CreatedAt:      parseTimestamp(createdAt).Format(time.RFC3339),
+			})
+			idx = len(posts) - 1
+		}
+
+		post := &posts[idx]
+		post.LikeCount++
+		post.LikedUsers = append(post.LikedUsers, likedUser)
+	}
+
+	return posts, rows.Err()
+}
+
+func countAdmins() (int, error) {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM allowed_users WHERE role = ?", string(roleAdmin)).Scan(&count)
+	return count, err
+}
+
+func userExists(userID int64) (bool, error) {
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM users WHERE id = ?", userID).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func queryPosts(query string, args ...interface{}) ([]Post, error) {
