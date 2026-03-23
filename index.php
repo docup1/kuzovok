@@ -166,6 +166,14 @@ function proxy_api_request_via_stream(string $proxy_url, string $cookie_path, bo
 
     $headers = collect_stream_forward_headers($content_type, strlen($body));
 
+    if (!empty($_SERVER['HTTP_COOKIE'])) {
+        $headers[] = 'Cookie: ' . $_SERVER['HTTP_COOKIE'];
+    }
+
+    if ($content_type) {
+        $headers[] = 'Content-Type: ' . $content_type;
+    }
+
     $options = [
         'http' => [
             'method' => $method,
