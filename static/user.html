@@ -114,8 +114,12 @@
                 }
             }
             if (path === "/" || path === "/user" || path === "/user/") return "";
-            // For /user/{username} paths, return empty string (root)
-            if (path.startsWith("/user/")) return "";
+            // For /user/{username} paths, extract the base path
+            if (path.startsWith("/user/")) {
+                // Find where /user/ starts and take everything before it
+                const userIndex = path.indexOf("/user/");
+                return userIndex > 0 ? path.substring(0, userIndex) : "";
+            }
             return path.endsWith("/") ? path.slice(0, -1) : path;
         })();
         
