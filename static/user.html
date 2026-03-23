@@ -67,15 +67,15 @@
     <div class="seaweed"></div><div class="seaweed"></div><div class="seaweed"></div><div class="seaweed"></div>
     <div class="container">
         <div class="header">
-            <a href="/" class="logo-link"><span class="logo">🐠</span></a>
-            <a href="/" class="btn-back">На главную</a>
+            <a href="#" id="logoLink" class="logo-link"><span class="logo">🐠</span></a>
+            <a href="#" id="backLink" class="btn-back">На главную</a>
         </div>
         <div id="loadingState" class="loading">Загрузка...</div>
         <div id="errorState" class="hidden">
             <div class="profile-card">
                 <div id="errorMessage" class="error"></div>
                 <div style="text-align:center;margin-top:20px;">
-                    <a href="/" class="btn-back">На главную</a>
+                    <a href="#" id="errorBackLink" class="btn-back">На главную</a>
                 </div>
             </div>
         </div>
@@ -122,6 +122,14 @@
             }
             return path.endsWith("/") ? path.slice(0, -1) : path;
         })();
+        
+        function userUrl(username) {
+            return API_BASE + "/user/" + encodeURIComponent(username);
+        }
+        
+        function homeUrl() {
+            return API_BASE + "/";
+        }
         
         function getUsernameFromPath() {
             const path = window.location.pathname || "/";
@@ -237,7 +245,7 @@
             const imageHtml = renderPostImage(post);
             const parentHtml = renderParentPost(post);
             const actionsHtml = '<div class="post-actions"><button class="like-btn' + likedClass + '" aria-label="' + likedLabel + '" onclick="likePost(' + post.id + ', this)">❤️ <span>' + post.likes + '</span></button></div>';
-            return '<div class="post" id="post-' + post.id + '"><div class="post-header"><div class="post-author"><span class="post-author-avatar">' + esc(post.avatar || '🐠') + '</span><a href="/user/' + esc(post.username) + '" onclick="event.stopPropagation();">' + esc(displayName) + '</a></div><div class="post-date">' + fmt(post.created_at) + '</div></div>' + parentHtml + contentHtml + imageHtml + '<div class="post-footer">' + actionsHtml + '</div></div>';
+            return '<div class="post" id="post-' + post.id + '"><div class="post-header"><div class="post-author"><span class="post-author-avatar">' + esc(post.avatar || '🐠') + '</span><a href="' + userUrl(post.username) + '" onclick="event.stopPropagation();">' + esc(displayName) + '</a></div><div class="post-date">' + fmt(post.created_at) + '</div></div>' + parentHtml + contentHtml + imageHtml + '<div class="post-footer">' + actionsHtml + '</div></div>';
         }
 
         function renderParentPost(post) {
@@ -313,6 +321,9 @@
         window.postsCache = {};
         createBubbles();
         createFish();
+        document.getElementById("logoLink").href = homeUrl();
+        document.getElementById("backLink").href = homeUrl();
+        document.getElementById("errorBackLink").href = homeUrl();
         loadUserProfile();
         setInterval(updateImageCountdowns, 1000);
     </script>

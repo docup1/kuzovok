@@ -128,7 +128,7 @@
             </div>
         </div>
         <div id="appContainer" class="app-container hidden">
-            <div id="appHeader" class="user-info"><div>Привет, <span id="username"></span>!</div><div class="header-actions"><a id="adminPanelLink" class="btn btn-secondary hidden" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" href="#">Админ панель</a><a class="btn btn-secondary" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" href="/profile">Профиль</a><button class="btn btn-secondary" style="width:auto;padding:10px 20px;" onclick="logout()">Выйти</button></div></div>
+            <div id="appHeader" class="user-info"><div>Привет, <span id="username"></span>!</div><div class="header-actions"><a id="adminPanelLink" class="btn btn-secondary hidden" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" href="#">Админ панель</a><a class="btn btn-secondary" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" id="profileLink" href="/profile">Профиль</a><button class="btn btn-secondary" style="width:auto;padding:10px 20px;" onclick="logout()">Выйти</button></div></div>
             <div id="appContent" class="app-content">
                 <div style="display:flex;justify-content:flex-end;margin-bottom:15px;">
                     <button class="create-btn" onclick="openPostModal()">Новый пост</button>
@@ -195,6 +195,14 @@
             }
 
             return path.endsWith("/") ? path.slice(0, -1) : path;
+        }
+
+        function userUrl(username) {
+            return API_BASE + "/user/" + encodeURIComponent(username);
+        }
+
+        function profileUrl() {
+            return API_BASE + "/profile";
         }
 
         function resolveMediaUrl(url) {
@@ -633,7 +641,7 @@
             const parentHtml = renderParentPost(post);
             const actionsHtml = '<div class="post-actions"><button class="like-btn' + likedClass + '" aria-label="' + likedLabel + '" onclick="likePost(' + post.id + ', this)">❤️ <span>' + post.likes + '</span></button><button class="reply-btn" aria-label="Ответить" onclick="replyToPost(' + post.id + ')">↩</button></div>';
 
-            return '<div class="post" id="post-' + post.id + '"><div class="post-header"><div class="post-author"><span class="post-author-avatar">' + esc(avatar) + '</span><a href="/user/' + esc(post.username) + '" onclick="event.stopPropagation();">' + esc(displayName) + '</a></div><div class="post-date">' + fmt(post.created_at) + '</div></div>' + parentHtml + contentHtml + imageHtml + '<div class="post-footer">' + actionsHtml + '</div></div>';
+            return '<div class="post" id="post-' + post.id + '"><div class="post-header"><div class="post-author"><span class="post-author-avatar">' + esc(avatar) + '</span><a href="' + userUrl(post.username) + '" onclick="event.stopPropagation();">' + esc(displayName) + '</a></div><div class="post-date">' + fmt(post.created_at) + '</div></div>' + parentHtml + contentHtml + imageHtml + '<div class="post-footer">' + actionsHtml + '</div></div>';
         }
 
         function renderParentPost(post) {
@@ -643,7 +651,7 @@
             const parent = post.parent_post;
             const parentName = parent.name || parent.username;
             const parentAvatar = parent.avatar || '🐠';
-            return '<div class="post-parent" onclick="scrollToPost(' + parent.id + ')" style="cursor:pointer;"><span class="post-author-avatar">' + esc(parentAvatar) + '</span> ↩ Ответ на: <a href="/user/' + esc(parent.username) + '" onclick="event.stopPropagation();"><strong>@' + esc(parent.username) + '</strong></a> — ' + esc(truncateText(parent.content, 20)) + '</div>';
+            return '<div class="post-parent" onclick="scrollToPost(' + parent.id + ')" style="cursor:pointer;"><span class="post-author-avatar">' + esc(parentAvatar) + '</span> ↩ Ответ на: <a href="' + userUrl(parent.username) + '" onclick="event.stopPropagation();"><strong>@' + esc(parent.username) + '</strong></a> — ' + esc(truncateText(parent.content, 20)) + '</div>';
         }
 
         function renderPostImage(post) {
@@ -758,6 +766,7 @@
 
         createBubbles();
         createFish();
+        document.getElementById("profileLink").href = profileUrl();
         checkAuth();
         window.setInterval(updateImageCountdowns, 1000);
     </script>
