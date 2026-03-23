@@ -177,8 +177,8 @@ function proxy_api_request_via_stream(string $proxy_url, string $cookie_path, bo
     $options = [
         'http' => [
             'method' => $method,
-            'header' => empty($headers) ? '' : implode("\r\n", $headers) . "\r\n",
-            'timeout' => 30,
+            'header' => empty($headers) ? '' : implode("\r\n", $headers),
+            'timeout' => 10,
             'ignore_errors' => true,
         ],
     ];
