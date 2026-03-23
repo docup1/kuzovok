@@ -80,6 +80,22 @@
         .seaweed:nth-child(2) { left: 15%; height: 200px; animation-delay: 0.5s; }
         .seaweed:nth-child(3) { right: 15%; height: 180px; animation-delay: 1s; }
         .seaweed:nth-child(4) { right: 5%; height: 160px; animation-delay: 1.5s; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 26, 51, 0.85); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: opacity 0.25s, visibility 0.25s; }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+        .modal { background: rgba(0, 77, 128, 0.95); border: 1px solid rgba(127, 219, 255, 0.3); border-radius: 20px; width: 90%; max-width: 500px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; transform: translateY(20px); transition: transform 0.25s; }
+        .modal-overlay.active .modal { transform: translateY(0); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid rgba(127, 219, 255, 0.2); }
+        .modal-header span { font-size: 1.2em; font-weight: 600; color: #d9fbff; }
+        .modal-close { background: rgba(255,255,255,0.1); border: none; color: rgba(255,255,255,0.8); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+        .modal-close:hover { background: rgba(255,255,255,0.2); }
+        .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+        .modal-body textarea { width: 100%; min-height: 120px; resize: vertical; }
+        .modal-footer { padding: 15px 20px; border-top: 1px solid rgba(127, 219, 255, 0.2); }
+        .create-btn { background: linear-gradient(135deg, #00bcd4 0%, #0097a7 100%); color: #fff; border: none; padding: 12px 20px; border-radius: 999px; font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; display: flex; align-items: center; gap: 6px; }
+        .create-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0, 188, 212, 0.4); }
+        .create-btn::before { content: "+"; font-size: 1.3em; line-height: 1; }
+        .modal-attach { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(0, 51, 102, 0.28); border: 1px solid rgba(127, 219, 255, 0.15); }
+        .modal-image-preview { max-width: 100%; max-height: 200px; border-radius: 12px; margin-top: 12px; object-fit: cover; display: none; }
     </style>
 </head>
 <body>
@@ -108,29 +124,10 @@
         <div id="appContainer" class="app-container hidden">
             <div id="appHeader" class="user-info"><div>Привет, <span id="username"></span>!</div><div class="header-actions"><a id="adminPanelLink" class="btn btn-secondary hidden" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" href="#">Админ панель</a><button class="btn btn-secondary" style="width:auto;padding:10px 20px;" onclick="logout()">Выйти</button></div></div>
             <div id="appContent" class="app-content">
-                <div class="tabs"><button class="tab active" onclick="showFeed()">Лента</button><button class="tab" onclick="showMyPosts()">Мои посты</button></div>
-                <div class="post-form" id="postForm">
-                    <div id="postSuccess" class="success hidden"></div>
-                    <div id="postError" class="error hidden"></div>
-                    <div id="replyToBlock" class="reply-to-block hidden">
-                        <div class="reply-to-info">
-                            <span>↩ Ответ на:</span>
-                            <strong id="replyToUsername"></strong>
-                            <span>—</span>
-                            <span id="replyToContent"></span>
-                        </div>
-                        <button class="reply-to-clear" onclick="clearReplyTo()" title="Убрать ответ">×</button>
-                    </div>
-                    <textarea id="postContent" placeholder="Расскажите обитателям океанариума о чём-нибудь..."></textarea>
-                    <div class="post-attach">
-                        <input id="postImageInput" class="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange="handleImageSelection(event)">
-                        <button class="attach-btn" type="button" onclick="openImagePicker()">Добавить картинку</button>
-                        <span id="selectedImageName" class="attach-name">Без картинки</span>
-                        <button id="clearImageButton" class="attach-clear hidden" type="button" onclick="clearSelectedImage()">Убрать</button>
-                        <div class="attach-hint">Картинка хранится 24 часа и исчезнет автоматически.</div>
-                    </div>
-                    <button class="btn" style="margin-top:15px;" onclick="createPost()">Опубликовать</button>
+                <div style="display:flex;justify-content:flex-end;margin-bottom:15px;">
+                    <button class="create-btn" onclick="openPostModal()">Новый пост</button>
                 </div>
+                <div class="tabs"><button class="tab active" onclick="showFeed()">Лента</button><button class="tab" onclick="showMyPosts()">Мои посты</button></div>
                 <div id="postsContainer"></div>
             </div>
             <div id="lockedState" class="locked-state hidden">
@@ -139,10 +136,42 @@
             </div>
         </div>
     </div>
+    <div class="modal-overlay" id="postModal" onclick="if(event.target===this)closePostModal()">
+        <div class="modal">
+            <div class="modal-header">
+                <span id="modalTitle">Новый пост</span>
+                <button class="modal-close" onclick="closePostModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="modalReplyBlock" class="reply-to-block hidden">
+                    <div class="reply-to-info">
+                        <span>↩ Ответ на:</span>
+                        <strong id="modalReplyUsername"></strong>
+                        <span>—</span>
+                        <span id="modalReplyContent"></span>
+                    </div>
+                    <button class="reply-to-clear" onclick="clearModalReply()">×</button>
+                </div>
+                <div id="modalPostSuccess" class="success hidden"></div>
+                <div id="modalPostError" class="error hidden"></div>
+                <textarea id="modalPostContent" placeholder="Расскажите обитателям океанариума о чём-нибудь..."></textarea>
+                <div class="modal-attach">
+                    <input id="modalPostImageInput" class="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange="handleModalImageSelection(event)">
+                    <button class="attach-btn" type="button" onclick="document.getElementById('modalPostImageInput').click()">📷 Добавить картинку</button>
+                    <span id="modalSelectedImageName" class="attach-name">Без картинки</span>
+                    <button id="modalClearImageButton" class="attach-clear hidden" type="button" onclick="clearModalImage()">Убрать</button>
+                    <div class="attach-hint">Картинка хранится 24 часа.</div>
+                </div>
+                <img id="modalImagePreview" class="modal-image-preview" alt="Превью">
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="submitFromModal()">Опубликовать</button>
+            </div>
+        </div>
+    </div>
     <script>
         let currentUser = null;
         let currentTab = "feed";
-        let replyToPostId = null;
         const ACCESS_DENIED_MESSAGE = "извините, вы пока не кузовок";
 
         const API_BASE = resolveBasePath();
@@ -273,7 +302,7 @@
             document.getElementById("postError").classList.add("hidden");
             document.getElementById("postContent").value = "";
             clearSelectedImage();
-            clearReplyTo();
+            window.modalReplyToPostId = null;
         }
 
         function applyAllowedState() {
@@ -309,26 +338,130 @@
             document.getElementById("clearImageButton").classList.add("hidden");
         }
 
-        function setReplyTo(post) {
-            const block = document.getElementById("replyToBlock");
-            const username = document.getElementById("replyToUsername");
-            const content = document.getElementById("replyToContent");
+        function openPostModal(post) {
+            const modal = document.getElementById("postModal");
+            const title = document.getElementById("modalTitle");
+            const replyBlock = document.getElementById("modalReplyBlock");
+
+            document.getElementById("modalPostContent").value = "";
+            document.getElementById("modalPostSuccess").classList.add("hidden");
+            document.getElementById("modalPostError").classList.add("hidden");
+            clearModalImage();
 
             if (post && post.id) {
-                replyToPostId = post.id;
-                username.textContent = "@" + post.username;
-                content.textContent = truncateText(post.content, 20);
-                block.classList.remove("hidden");
-                document.getElementById("postContent").focus();
-                scrollToPostForm();
+                title.textContent = "Ответ";
+                document.getElementById("modalReplyUsername").textContent = "@" + post.username;
+                document.getElementById("modalReplyContent").textContent = truncateText(post.content, 20);
+                replyBlock.classList.remove("hidden");
+                window.modalReplyToPostId = post.id;
             } else {
-                replyToPostId = null;
-                block.classList.add("hidden");
+                title.textContent = "Новый пост";
+                replyBlock.classList.add("hidden");
+                window.modalReplyToPostId = null;
             }
+
+            modal.classList.add("active");
+            setTimeout(() => document.getElementById("modalPostContent").focus(), 100);
         }
 
-        function clearReplyTo() {
-            setReplyTo(null);
+        function closePostModal() {
+            document.getElementById("postModal").classList.remove("active");
+        }
+
+        function clearModalReply() {
+            const replyBlock = document.getElementById("modalReplyBlock");
+            replyBlock.classList.add("hidden");
+            window.modalReplyToPostId = null;
+            document.getElementById("modalTitle").textContent = "Новый пост";
+        }
+
+        function handleModalImageSelection(event) {
+            const input = event.target;
+            const file = input.files && input.files[0] ? input.files[0] : null;
+            const name = document.getElementById("modalSelectedImageName");
+            const clearButton = document.getElementById("modalClearImageButton");
+            const preview = document.getElementById("modalImagePreview");
+
+            if (!file) {
+                name.textContent = "Без картинки";
+                clearButton.classList.add("hidden");
+                preview.style.display = "none";
+                return;
+            }
+
+            name.textContent = file.name;
+            clearButton.classList.remove("hidden");
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.style.display = "block";
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearModalImage() {
+            const input = document.getElementById("modalPostImageInput");
+            input.value = "";
+            document.getElementById("modalSelectedImageName").textContent = "Без картинки";
+            document.getElementById("modalClearImageButton").classList.add("hidden");
+            document.getElementById("modalImagePreview").style.display = "none";
+        }
+
+        async function submitFromModal() {
+            if (!currentUser || !currentUser.is_allowed) {
+                applyLockedState(currentUser && currentUser.access_message);
+                return;
+            }
+
+            const content = document.getElementById("modalPostContent").value.trim();
+            const imageInput = document.getElementById("modalPostImageInput");
+            const imageFile = imageInput.files && imageInput.files[0] ? imageInput.files[0] : null;
+            const replyToPostId = window.modalReplyToPostId || null;
+
+            if (!content && !imageFile) {
+                showModalError("Добавьте текст или картинку");
+                return;
+            }
+
+            let response;
+            if (imageFile) {
+                const formData = new FormData();
+                formData.append("content", content);
+                formData.append("image", imageFile);
+                if (replyToPostId) {
+                    formData.append("parent_post_id", replyToPostId);
+                }
+                response = await api("/posts", {
+                    method: "POST",
+                    body: formData
+                });
+            } else {
+                const body = { content };
+                if (replyToPostId) {
+                    body.parent_post_id = replyToPostId;
+                }
+                response = await api("/posts", {
+                    method: "POST",
+                    body: JSON.stringify(body)
+                });
+            }
+
+            if (!response.success) {
+                showModalError(response.message);
+                return;
+            }
+
+            closePostModal();
+            window.modalReplyToPostId = null;
+            setTimeout(() => { window.location.reload(); }, 200);
+        }
+
+        function showModalError(message) {
+            const element = document.getElementById("modalPostError");
+            element.textContent = message;
+            element.classList.remove("hidden");
+            setTimeout(() => element.classList.add("hidden"), 5000);
         }
 
         function truncateText(text, maxLength) {
@@ -456,7 +589,6 @@
 
             document.getElementById("postContent").value = "";
             clearSelectedImage();
-            clearReplyTo();
             document.getElementById("postSuccess").textContent = "Пост опубликован!";
             document.getElementById("postSuccess").classList.remove("hidden");
             setTimeout(() => document.getElementById("postSuccess").classList.add("hidden"), 3000);
@@ -581,12 +713,14 @@
         }
 
         function replyToPost(postId) {
-            const postElement = document.getElementById("post-" + postId);
-            if (!postElement) return;
+            if (!currentUser || !currentUser.is_allowed) {
+                applyLockedState(currentUser && currentUser.access_message);
+                return;
+            }
 
             const postData = window.postsCache && window.postsCache[postId];
             if (postData) {
-                setReplyTo(postData);
+                openPostModal(postData);
             }
         }
 
