@@ -1,58 +1,49 @@
-# Makefile для локальной разработки и сборки Кузовка
+# Makefile для Кузовок
 
-BINARY_NAME ?= kusovok
-GO ?= go
-GOFMT ?= gofmt
+BINARY_NAME ?= server
+GO := go
+GOFMT := gofmt
 PHP ?= php
 
-LOCAL_ADDR ?= 127.0.0.1:8080
-PROXY_ADDR ?= 127.0.0.1:8090
+LOCAL_ADDR := 127.0.0.1:8080
+PROXY_ADDR := 127.0.0.1:8090
 
 GOOS ?= freebsd
 GOARCH ?= amd64
-CGO_ENABLED ?= 0
+CGO_ENABLED := 0
 
-.PHONY: all build clean deploy-prod fmt freebsd run run-backend run-proxy run-prod test
+.PHONY: all build clean fmt run run-proxy run-prod test
 
 all: build
 
 fmt:
-	@echo "🧼 Форматирование Go-кода..."
-	$(GOFMT) -w main.go main_test.go
+	@echo "Форматирование Go-кода..."
+	find . -name "*.go" -not -path "./vendor/*" -exec $(GOFMT) -w {} +
 
 test:
-	@echo "🧪 Запуск локальных тестов..."
+	@echo "Запуск тестов..."
 	$(GO) test ./...
 
 build:
-	@echo "🔨 Сборка для текущей ОС..."
-	$(GO) build -o $(BINARY_NAME) .
-	@echo "✅ Готово: $(BINARY_NAME)"
+	@echo "Сборка..."
+	$(GO) build -o $(BINARY_NAME) ./cmd/server
+	@echo "Готово: $(BINARY_NAME)"
 
-run: run-backend
-
-run-backend:
-	@echo "🚀 Go backend на http://$(LOCAL_ADDR)"
-	KUSOVOK_ADDR=$(LOCAL_ADDR) KUSOVOK_SECURE_COOKIE=false $(GO) run .
+run:
+	@echo "Backend на http://$(LOCAL_ADDR)"
+	$(GO) run ./cmd/server
 
 run-proxy:
-	@echo "🌐 PHP прокси на http://$(PROXY_ADDR)"
+	@echo "PHP прокси на http://$(PROXY_ADDR)"
 	KUSOVOK_BACKEND_URL=http://$(LOCAL_ADDR) $(PHP) -S $(PROXY_ADDR) index.php
 
 run-prod:
-	@echo "🛑 Остановка запущенного ./$(BINARY_NAME), если он уже работает..."
+	@echo "Остановка $(BINARY_NAME)..."
 	-pkill -x $(BINARY_NAME)
-	@echo "🚀 Запуск ./$(BINARY_NAME) в фоне, лог: $(BINARY_NAME).log"
+	@echo "Запуск $(BINARY_NAME)..."
 	nohup ./$(BINARY_NAME) > $(BINARY_NAME).log 2>&1 &
 
-deploy-prod: build run-prod
-
-freebsd:
-	@echo "🔨 Сборка под FreeBSD ($(GOARCH))..."
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) $(GO) build -o $(BINARY_NAME) .
-	@echo "✅ Готово: $(BINARY_NAME)"
-
 clean:
-	@echo "🧹 Очистка артефактов..."
+	@echo "Очистка..."
 	rm -f $(BINARY_NAME)
-	@echo "✅ Очищено"
+	@echo "Очищено"

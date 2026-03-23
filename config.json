@@ -1,0 +1,65 @@
+{
+  "server": {
+    "addr": ":8080",
+    "base_url": "http://localhost:8080"
+  },
+  "database": {
+    "path": "./kusovok.db",
+    "max_open_conns": 1
+  },
+  "auth": {
+    "jwt_secret": "kusovok-secret-key-change-in-production",
+    "jwt_expire_hours": 24,
+    "cookie_name": "token",
+    "cookie_path": "/",
+    "secure_cookies": false
+  },
+  "images": {
+    "dir": "./img",
+    "public_prefix": "/img/",
+    "allowed_types": ["image/jpeg", "image/png", "image/webp", "image/gif"],
+    "max_size_mb": 10,
+    "lifetime_hours": 24
+  },
+  "messages": {
+    "access_denied": "извините, вы пока не кузовок",
+    "admin_denied": "доступ только для администратора",
+    "register_success": "Регистрация успешна",
+    "login_success": "Вход успешен",
+    "logout_success": "Выход успешен",
+    "post_created": "Пост создан",
+    "role_updated": "Роль обновлена",
+    "user_added": "Пользователь добавлен в разрешенные",
+    "user_removed": "Пользователь удален из разрешенных",
+    "error_invalid_data": "Неверный формат данных",
+    "error_required_fields": "Все поля обязательны",
+    "error_password_short": "Пароль должен быть не менее 6 символов",
+    "error_user_exists": "Пользователь уже существует",
+    "error_invalid_credentials": "Неверный логин или пароль",
+    "error_unauthorized": "Требуется авторизация",
+    "error_invalid_token": "Неверный токен",
+    "error_method_not_allowed": "Метод не разрешен",
+    "error_post_empty": "Пост должен содержать текст или картинку",
+    "error_post_too_long": "Пост слишком длинный (макс. 1000 символов)",
+    "error_image_too_large": "Картинка слишком большая (макс. 10 MB)",
+    "error_invalid_image": "Допустимы только JPG, PNG, WEBP или GIF",
+    "error_post_not_found": "Пост не найден",
+    "error_invalid_post_id": "Неверный идентификатор поста",
+    "error_invalid_user_id": "Неверный идентификатор пользователя",
+    "error_user_not_found": "Пользователь не найден",
+    "error_invalid_role": "Недопустимая роль",
+    "error_already_allowed": "Пользователь уже добавлен в разрешенные",
+    "error_last_admin": "Нельзя понизить последнего администратора",
+    "error_demote_admin_first": "Сначала понизьте администратора до user",
+    "error_not_found_in_allowed": "Пользователь не найден в разрешенных",
+    "error_route_not_found": "Маршрут не найден",
+    "error_server": "Ошибка сервера"
+  },
+  "limits": {
+    "post_content_max_length": 1000,
+    "multipart_body_size_mb": 11
+  },
+  "cleanup": {
+    "interval_minutes": 1
+  }
+}

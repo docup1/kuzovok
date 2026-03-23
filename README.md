@@ -1,126 +1,124 @@
 # Кузовок
 
-Небольшая социальная сеть с Go backend, SQLite-хранилищем и статическим frontend. Репозиторий можно запускать и тестировать локально без привязки к продовому пути `~s409784`.
+Социальная сеть с Go backend на DDD-архитектуре, SQLite-хранилищем и статическим frontend.
 
-## Что внутри
+## Архитектура (DDD)
 
-- `main.go` — HTTP API, миграции и раздача статики/картинок
-- `static/index.html` — клиентское приложение
-- `index.php` и `.htaccess` — прокси и роутинг для shared-хостинга
-- `img/` — локальное хранилище временных картинок к постам
-- `main_test.go` — локальные integration-тесты основных пользовательских сценариев
+```
+internal/
+├── domain/           # Сущности, интерфейсы репозиториев, доменные сервисы
+│   ├── user/         # Пользователи
+│   ├── post/         # Посты
+│   ├── like/         # Лайки
+│   ├── access/       # Управление доступом
+│   └── shared/       # Общие типы (Role, UserSummary, AccessInfo)
+├── application/      # Use cases (сценарии использования)
+│   ├── authapp/      # Регистрация, логин, /me
+│   ├── postapp/      # Создание постов, лента
+│   ├── likeapp/      # Лайк/unlike
+│   └── admin/        # Админские операции
+├── infrastructure/  # Реализации (БД, auth, storage)
+│   ├── config/       # Загрузка config.json
+│   ├── database/     # SQLite репозитории
+│   ├── auth/         # JWT, cookies
+│   └── storage/      # Хранение картинок
+└── handlers/         # HTTP обработчики, middleware, router
 
-## Что умеет
-
-- текстовые посты и посты с одной картинкой
-- локальное хранение картинок в `./img`
-- автоматическое удаление картинки через 24 часа
-- обратная совместимость для старых постов и старого JSON-клиента
-- allowlist-доступ через таблицу `allowed_users`
-- отдельная admin-панель по пути `/admin`
-
-## Локальный запуск
-
-### 1. Запустить backend
-
-```bash
-make run-backend
+cmd/server/main.go    # Точка входа
+config.json           # Конфигурация
+static/               # Фронтенд
+img/                  # Временные картинки
 ```
 
-Приложение будет доступно на [http://127.0.0.1:8080](http://127.0.0.1:8080).
+## Конфигурация
 
-### 2. При необходимости проверить PHP-прокси локально
+Все настройки в `config.json`:
 
-В отдельном терминале:
-
-```bash
-make run-proxy
+```json
+{
+  "server": { "addr": ":8080" },
+  "database": { "path": "./kusovok.db", "max_open_conns": 25 },
+  "auth": {
+    "jwt_secret": "change-me-in-production",
+    "jwt_expire_hours": 24,
+    "cookie_name": "token",
+    "cookie_path": "/",
+    "secure_cookie": false
+  },
+  "images": {
+    "dir": "./img",
+    "public_path": "/img/",
+    "lifetime_hours": 24,
+    "max_size_mb": 10
+  },
+  "messages": {
+    "access_denied": "извините, вы пока не кузовок",
+    "admin_denied": "доступ только для администратора"
+  },
+  "limits": {
+    "post_content_max_length": 5000
+  },
+  "cleanup": {
+    "interval_minutes": 60
+  }
+}
 ```
 
-После этого прокси будет доступен на [http://127.0.0.1:8090](http://127.0.0.1:8090).
-
-## Локальные тесты
+## Запуск
 
 ```bash
-make test
+# Сборка
+make build
+
+# Запуск
+make run
+
+# Или напрямую
+go run cmd/server/main.go
 ```
 
-Тесты поднимают временную SQLite-базу и проверяют:
+Приложение доступно на [http://localhost:8080](http://localhost:8080).
 
-- регистрация пользователя
-- создание текстового поста
-- создание поста с картинкой и без текста
-- миграцию существующей схемы БД
-- удаление просроченной картинки и очистку ссылки в БД
-- отказ на невалидном формате и слишком большом файле
-- лайк поста другим пользователем
-- повторный лайк как снятие лайка
-- корректное состояние `liked`, картинки и счётчика в ленте
-- ограничение доступа к ленте и публикации через `allowed_users`
-- роли `user`/`admin` в allowlist и admin API для управления доступом
+## API
 
-## Разрешённые пользователи
+| Метод | Путь | Описание |
+|-------|------|----------|
+| POST | /api/register | Регистрация |
+| POST | /api/login | Логин |
+| POST | /api/logout | Выход |
+| GET | /api/me | Текущий пользователь |
+| GET | /api/feed | Лента постов |
+| POST | /api/posts | Создать пост |
+| GET | /api/posts | Посты пользователя |
+| POST | /api/like | Лайк/анлайк |
+| GET | /api/admin/users | Все пользователи |
+| GET | /api/admin/likes | Лайки постов |
+| GET | /api/admin/allowed-users | Allowlist |
+| POST | /api/admin/allowed-users | Добавить в allowlist |
+| PUT | /api/admin/allowed-users/{id}/role | Изменить роль |
+| DELETE | /api/admin/allowed-users/{id} | Удалить из allowlist |
 
-Доступ к ленте, публикации постов и лайкам есть только у пользователей, чьи `user_id` добавлены в таблицу `allowed_users`.
+## Allowlist-доступ
 
-После миграции таблица создаётся пустой. Это значит, что сразу после выката все существующие и новые пользователи смогут логиниться, но будут видеть только сообщение `извините, вы пока не кузовок`, пока их не внесут в allowlist вручную.
-
-Пример выдачи обычного доступа:
+По умолчанию allowlist пуст. Новые пользователи видят сообщение "извините, вы пока не кузовок".
 
 ```sql
-INSERT INTO allowed_users (user_id) VALUES (42);
-```
+-- Обычный доступ
+INSERT INTO allowed_users (user_id) VALUES (1);
 
-Пример создания первого администратора:
-
-```sql
+-- Первый админ
 INSERT INTO allowed_users (user_id, role) VALUES (1, 'admin');
 ```
 
-Сама таблица создаётся автоматически миграцией при старте приложения и имеет вид:
-
-- `user_id INTEGER PRIMARY KEY`
-- `role TEXT NOT NULL DEFAULT 'user'`
-- `created_at DATETIME DEFAULT CURRENT_TIMESTAMP`
-
-## Админка
-
-Страница администрирования доступна по пути `/admin` относительно текущего base path приложения.
-
-Через неё администратор может:
-
-- видеть всех зарегистрированных пользователей
-- добавлять пользователей в allowlist
-- повышать allowlisted-пользователей до `admin`
-- понижать `admin` обратно до `user`
-- удалять allowlisted-пользователей с ролью `user`
-- смотреть, кто лайкнул какой пост
-
-Важные ограничения:
-
-- admin API доступны только пользователям с ролью `admin`
-- удалить `admin` напрямую нельзя, его нужно сначала понизить до `user`
-- последнего администратора нельзя понизить через панель
-
-## Полезные команды
+## Команды Makefile
 
 ```bash
-make fmt
-make build
-make freebsd
-make clean
+make build      # Сборка
+make run        # Запуск
+make test       # Тесты
+make fmt        # Форматирование
+make clean      # Очистка
 ```
-
-## Переменные окружения
-
-- `KUSOVOK_ADDR` — адрес Go-сервера, по умолчанию `:8080`
-- `KUSOVOK_DB_PATH` — путь к SQLite-файлу, по умолчанию `./kusovok.db`
-- `KUSOVOK_JWT_SECRET` — секрет для JWT
-- `KUSOVOK_COOKIE_PATH` — путь для cookie, по умолчанию `/`
-- `KUSOVOK_SECURE_COOKIE` — `true`/`false`, нужен ли флаг `Secure`
-- `KUSOVOK_IMAGE_DIR` — директория для хранения картинок, по умолчанию `./img`
-- `KUSOVOK_BACKEND_URL` — адрес backend для PHP-прокси
-- `KUSOVOK_PROXY_DRIVER` — `auto`, `curl` или `stream`; по умолчанию `auto`
 
 ## Продовый деплой
 
@@ -128,5 +126,3 @@ make clean
 
 - `.htaccess` — маршрутизация под путь вида `/~user/kuzovok/`
 - `index.php` — проксирование `/api/*` в локальный Go backend и раздача статики
-
-Если путь на хостинге изменится, обновите `RewriteBase` и `FallbackResource` в `.htaccess`.
