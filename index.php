@@ -22,33 +22,38 @@ $is_https = (
     || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
 );
 
+// Determine the path relative to base_path
+$relative_path = $request_uri;
 if ($base_path !== '' && strpos($request_uri, $base_path) === 0) {
-    $request_uri = substr($request_uri, strlen($base_path));
+    $relative_path = substr($request_uri, strlen($base_path));
 }
-if ($request_uri === '' || $request_uri === '/') {
-    $request_uri = '/';
+if ($relative_path === '' || $relative_path === '/') {
+    $relative_path = '/';
 }
 
-if (strpos($request_uri, '/api/') === 0) {
-    proxy_api_request($backend_url . $request_uri, $cookie_path, $is_https, $proxy_driver);
+// Handle API requests - proxy to backend
+if (strpos($relative_path, '/api/') === 0) {
+    proxy_api_request($backend_url . $relative_path, $cookie_path, $is_https, $proxy_driver);
     exit;
 }
 
-if (strpos($request_uri, '/img/') === 0) {
-    serve_local_file($image_dir, $request_uri, true);
+// Handle images - serve locally
+if (strpos($relative_path, '/img/') === 0) {
+    serve_local_file($image_dir, $relative_path, true);
     exit;
 }
 
-if ($request_uri === '/admin' || $request_uri === '/admin/' || $request_uri === '/admin.html') {
+// Route static pages
+if ($relative_path === '/admin' || $relative_path === '/admin/' || $relative_path === '/admin.html') {
     $file_path = $static_dir . '/admin.html';
-} elseif ($request_uri === '/profile' || $request_uri === '/profile/' || $request_uri === '/profile.html') {
+} elseif ($relative_path === '/profile' || $relative_path === '/profile/' || $relative_path === '/profile.html') {
     $file_path = $static_dir . '/profile.html';
-} elseif (strpos($request_uri, '/user/') === 0) {
+} elseif (strpos($relative_path, '/user/') === 0) {
     $file_path = $static_dir . '/user.html';
-} elseif ($request_uri === '/' || $request_uri === '/index.html') {
+} elseif ($relative_path === '/' || $relative_path === '/index.html') {
     $file_path = $static_dir . '/index.html';
 } else {
-    $file_path = $static_dir . $request_uri;
+    $file_path = $static_dir . $relative_path;
 }
 
 if (is_file($file_path)) {

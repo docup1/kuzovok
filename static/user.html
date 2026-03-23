@@ -133,7 +133,7 @@
         
         function getUsernameFromPath() {
             const path = window.location.pathname || "/";
-            const match = path.match(/^\/user\/([^/]+)/);
+            const match = path.match(/\/user\/([^/]+)/);
             return match ? match[1] : null;
         }
 

@@ -173,6 +173,11 @@
                 }
             }
             if (path === "/" || path === "/profile" || path === "/profile/") return "";
+            // Extract base path before /profile
+            const profileIndex = path.indexOf("/profile");
+            if (profileIndex > 0) {
+                return path.substring(0, profileIndex);
+            }
             return path.endsWith("/") ? path.slice(0, -1) : path;
         })();
         
