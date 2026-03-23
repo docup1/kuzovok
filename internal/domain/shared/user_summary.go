@@ -8,6 +8,8 @@ type AccessInfo struct {
 type UserSummary struct {
 	ID        int64  `json:"id"`
 	Username  string `json:"username"`
+	Avatar    string `json:"avatar"`
+	Name      string `json:"name"`
 	PostCount int    `json:"post_count"`
 	IsAllowed bool   `json:"is_allowed"`
 	Role      string `json:"role"`
@@ -17,5 +19,7 @@ type UserSummary struct {
 type ParentPostInfo struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
+	Name     string `json:"name"`
 	Content  string `json:"content"`
 }

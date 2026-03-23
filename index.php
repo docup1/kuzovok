@@ -41,6 +41,10 @@ if (strpos($request_uri, '/img/') === 0) {
 
 if ($request_uri === '/admin' || $request_uri === '/admin/' || $request_uri === '/admin.html') {
     $file_path = $static_dir . '/admin.html';
+} elseif ($request_uri === '/profile' || $request_uri === '/profile/' || $request_uri === '/profile.html') {
+    $file_path = $static_dir . '/profile.html';
+} elseif (strpos($request_uri, '/user/') === 0) {
+    $file_path = $static_dir . '/user.html';
 } elseif ($request_uri === '/' || $request_uri === '/index.html') {
     $file_path = $static_dir . '/index.html';
 } else {

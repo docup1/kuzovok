@@ -51,8 +51,14 @@
         .file-input { display: none; }
         .post { background: rgba(0, 51, 102, 0.4); border-radius: 15px; padding: 20px; margin-bottom: 15px; border: 1px solid rgba(127, 219, 255, 0.2); position: relative; }
         .post-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .post-author { font-weight: 600; color: #7fdbff; }
-        .post-author::before { content: "🐟 "; }
+        .post-author { font-weight: 600; color: #7fdbff; display: flex; align-items: center; gap: 8px; }
+        .post-author::before { content: ""; }
+        .post-author-avatar { font-size: 1.1em; }
+        .post-author a { color: #7fdbff; text-decoration: none; }
+        .post-author a:hover { text-decoration: underline; }
+        .post-parent .post-author-avatar { font-size: 1em; margin-right: 4px; }
+        .post-parent a { color: #7fdbff; text-decoration: none; }
+        .post-parent a:hover { text-decoration: underline; }
         .post-date { font-size: 0.85em; color: rgba(255,255,255,0.5); }
         .post-content { line-height: 1.6; word-wrap: break-word; margin-bottom: 14px; }
         .post-content:last-child { margin-bottom: 0; }
@@ -122,12 +128,11 @@
             </div>
         </div>
         <div id="appContainer" class="app-container hidden">
-            <div id="appHeader" class="user-info"><div>Привет, <span id="username"></span>!</div><div class="header-actions"><a id="adminPanelLink" class="btn btn-secondary hidden" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" href="#">Админ панель</a><button class="btn btn-secondary" style="width:auto;padding:10px 20px;" onclick="logout()">Выйти</button></div></div>
+            <div id="appHeader" class="user-info"><div>Привет, <span id="username"></span>!</div><div class="header-actions"><a id="adminPanelLink" class="btn btn-secondary hidden" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" href="#">Админ панель</a><a class="btn btn-secondary" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" href="/profile">Профиль</a><button class="btn btn-secondary" style="width:auto;padding:10px 20px;" onclick="logout()">Выйти</button></div></div>
             <div id="appContent" class="app-content">
                 <div style="display:flex;justify-content:flex-end;margin-bottom:15px;">
                     <button class="create-btn" onclick="openPostModal()">Новый пост</button>
                 </div>
-                <div class="tabs"><button class="tab active" onclick="showFeed()">Лента</button><button class="tab" onclick="showMyPosts()">Мои посты</button></div>
                 <div id="postsContainer"></div>
             </div>
             <div id="lockedState" class="locked-state hidden">
@@ -171,7 +176,6 @@
     </div>
     <script>
         let currentUser = null;
-        let currentTab = "feed";
         const ACCESS_DENIED_MESSAGE = "извините, вы пока не кузовок";
 
         const API_BASE = resolveBasePath();
@@ -601,8 +605,7 @@
                 return;
             }
 
-            const endpoint = currentTab === "feed" ? "/feed" : "/posts";
-            const response = await api(endpoint);
+            const response = await api("/feed");
             const container = document.getElementById("postsContainer");
 
             if (response.status === 403) {
@@ -623,12 +626,14 @@
         function renderPost(post) {
             const likedClass = post.liked ? " liked" : "";
             const likedLabel = post.liked ? "Убрать лайк" : "Поставить лайк";
+            const displayName = post.name || post.username;
+            const avatar = post.avatar || '🐠';
             const contentHtml = post.content ? '<div class="post-content">' + esc(post.content) + '</div>' : "";
             const imageHtml = renderPostImage(post);
             const parentHtml = renderParentPost(post);
             const actionsHtml = '<div class="post-actions"><button class="like-btn' + likedClass + '" aria-label="' + likedLabel + '" onclick="likePost(' + post.id + ', this)">❤️ <span>' + post.likes + '</span></button><button class="reply-btn" aria-label="Ответить" onclick="replyToPost(' + post.id + ')">↩</button></div>';
 
-            return '<div class="post" id="post-' + post.id + '"><div class="post-header"><div class="post-author">' + esc(post.username) + '</div><div class="post-date">' + fmt(post.created_at) + '</div></div>' + parentHtml + contentHtml + imageHtml + '<div class="post-footer">' + actionsHtml + '</div></div>';
+            return '<div class="post" id="post-' + post.id + '"><div class="post-header"><div class="post-author"><span class="post-author-avatar">' + esc(avatar) + '</span><a href="/user/' + esc(post.username) + '" onclick="event.stopPropagation();">' + esc(displayName) + '</a></div><div class="post-date">' + fmt(post.created_at) + '</div></div>' + parentHtml + contentHtml + imageHtml + '<div class="post-footer">' + actionsHtml + '</div></div>';
         }
 
         function renderParentPost(post) {
@@ -636,7 +641,9 @@
                 return "";
             }
             const parent = post.parent_post;
-            return '<div class="post-parent" onclick="scrollToPost(' + parent.id + ')" style="cursor:pointer;">↩ Ответ на: <strong>@' + esc(parent.username) + '</strong> — ' + esc(truncateText(parent.content, 20)) + '</div>';
+            const parentName = parent.name || parent.username;
+            const parentAvatar = parent.avatar || '🐠';
+            return '<div class="post-parent" onclick="scrollToPost(' + parent.id + ')" style="cursor:pointer;"><span class="post-author-avatar">' + esc(parentAvatar) + '</span> ↩ Ответ на: <a href="/user/' + esc(parent.username) + '" onclick="event.stopPropagation();"><strong>@' + esc(parent.username) + '</strong></a> — ' + esc(truncateText(parent.content, 20)) + '</div>';
         }
 
         function renderPostImage(post) {
@@ -731,18 +738,6 @@
                 applyLockedState(currentUser && currentUser.access_message);
                 return;
             }
-            currentTab = "feed";
-            document.querySelectorAll(".tab").forEach((tab, index) => tab.classList.toggle("active", index === 0));
-            loadPosts();
-        }
-
-        function showMyPosts() {
-            if (!currentUser || !currentUser.is_allowed) {
-                applyLockedState(currentUser && currentUser.access_message);
-                return;
-            }
-            currentTab = "my";
-            document.querySelectorAll(".tab").forEach((tab, index) => tab.classList.toggle("active", index === 1));
             loadPosts();
         }
 

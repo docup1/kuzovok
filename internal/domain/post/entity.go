@@ -10,6 +10,8 @@ type Post struct {
 	ID             int64                  `json:"id"`
 	UserID         int64                  `json:"user_id"`
 	Username       string                 `json:"username"`
+	Avatar         string                 `json:"avatar"`
+	Name           string                 `json:"name"`
 	Content        string                 `json:"content"`
 	CreatedAt      time.Time              `json:"created_at"`
 	Likes          int                    `json:"likes"`

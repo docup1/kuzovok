@@ -33,6 +33,9 @@ func (m *Migrator) Run() error {
 	if err := m.createIndexes(); err != nil {
 		return err
 	}
+	if err := m.createUserProfilesTable(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -157,6 +160,20 @@ func (m *Migrator) createPostRepliesTable() error {
 
 func (m *Migrator) createIndexes() error {
 	_, err := m.db.Exec("CREATE INDEX IF NOT EXISTS idx_posts_image_expires_at ON posts(image_expires_at)")
+	return err
+}
+
+func (m *Migrator) createUserProfilesTable() error {
+	_, err := m.db.Exec(`
+		CREATE TABLE IF NOT EXISTS user_profiles (
+			user_id INTEGER PRIMARY KEY,
+			avatar TEXT DEFAULT '🐠',
+			name TEXT DEFAULT '',
+			bio TEXT DEFAULT '',
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)
+	`)
 	return err
 }
 

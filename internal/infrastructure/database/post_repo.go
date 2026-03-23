@@ -39,11 +39,12 @@ func (r *PostRepository) Create(ctx context.Context, userID int64, content, imag
 
 func (r *PostRepository) GetByID(ctx context.Context, id int64) (*post.Post, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT p.id, p.user_id, u.username, p.content, p.created_at,
+		SELECT p.id, p.user_id, u.username, COALESCE(up.avatar, '🐠'), COALESCE(up.name, ''), p.content, p.created_at,
 		       (SELECT COUNT(*) FROM likes WHERE post_id = p.id) AS likes,
 		       0 AS liked, p.image_url, p.image_expires_at
 		  FROM posts p
 		  JOIN users u ON p.user_id = u.id
+		  LEFT JOIN user_profiles up ON up.user_id = u.id
 		 WHERE p.id = ?`,
 		id,
 	)
@@ -59,12 +60,13 @@ func (r *PostRepository) GetByID(ctx context.Context, id int64) (*post.Post, err
 
 func (r *PostRepository) GetUserPosts(ctx context.Context, userID, currentUserID int64) ([]post.Post, error) {
 	return r.queryPosts(ctx, `
-		SELECT p.id, p.user_id, u.username, p.content, p.created_at,
+		SELECT p.id, p.user_id, u.username, COALESCE(up.avatar, '🐠'), COALESCE(up.name, ''), p.content, p.created_at,
 		       (SELECT COUNT(*) FROM likes WHERE post_id = p.id) AS likes,
 		       EXISTS(SELECT 1 FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked,
 		       p.image_url, p.image_expires_at
 		  FROM posts p
 		  JOIN users u ON p.user_id = u.id
+		  LEFT JOIN user_profiles up ON up.user_id = u.id
 		 WHERE p.user_id = ?
 		 ORDER BY p.created_at DESC`,
 		currentUserID, userID,
@@ -73,12 +75,13 @@ func (r *PostRepository) GetUserPosts(ctx context.Context, userID, currentUserID
 
 func (r *PostRepository) GetFeed(ctx context.Context, currentUserID int64, limit int) ([]post.Post, error) {
 	return r.queryPosts(ctx, `
-		SELECT p.id, p.user_id, u.username, p.content, p.created_at,
+		SELECT p.id, p.user_id, u.username, COALESCE(up.avatar, '🐠'), COALESCE(up.name, ''), p.content, p.created_at,
 		       (SELECT COUNT(*) FROM likes WHERE post_id = p.id) AS likes,
 		       EXISTS(SELECT 1 FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked,
 		       p.image_url, p.image_expires_at
 		  FROM posts p
 		  JOIN users u ON p.user_id = u.id
+		  LEFT JOIN user_profiles up ON up.user_id = u.id
 		 ORDER BY p.created_at DESC
 		 LIMIT ?`,
 		currentUserID, limit,
@@ -120,10 +123,13 @@ func (r *PostRepository) scanPost(scanner interface{ Scan(...interface{}) error 
 	var imageURL sql.NullString
 	var imageExpiresAt sql.NullString
 
-	if err := scanner.Scan(&p.ID, &p.UserID, &p.Username, &p.Content, &createdAt, &likes, &liked, &imageURL, &imageExpiresAt); err != nil {
+	if err := scanner.Scan(&p.ID, &p.UserID, &p.Username, &p.Avatar, &p.Name, &p.Content, &createdAt, &likes, &liked, &imageURL, &imageExpiresAt); err != nil {
 		return nil, err
 	}
 
+	if p.Avatar == "" {
+		p.Avatar = "🐠"
+	}
 	p.CreatedAt = parseTimestamp(createdAt)
 	p.Likes = likes
 	p.Liked = liked == 1
@@ -145,21 +151,28 @@ func (r *PostRepository) fillParentPost(ctx context.Context, p *post.Post) {
 
 	p.ParentPostID = &parentPostID.Int64
 
-	var parentUsername, parentContent string
+	var parentUsername, parentAvatar, parentName, parentContent string
 	err = r.db.QueryRowContext(ctx, `
-		SELECT u.username, p.content 
+		SELECT u.username, COALESCE(up.avatar, '🐠'), COALESCE(up.name, ''), p.content 
 		FROM posts p 
 		JOIN users u ON p.user_id = u.id 
+		LEFT JOIN user_profiles up ON up.user_id = u.id
 		WHERE p.id = ?`,
 		parentPostID.Int64,
-	).Scan(&parentUsername, &parentContent)
+	).Scan(&parentUsername, &parentAvatar, &parentName, &parentContent)
 	if err != nil {
 		return
+	}
+
+	if parentAvatar == "" {
+		parentAvatar = "🐠"
 	}
 
 	p.ParentPost = &post.ParentPostInfo{
 		ID:       parentPostID.Int64,
 		Username: parentUsername,
+		Avatar:   parentAvatar,
+		Name:     parentName,
 		Content:  parentContent,
 	}
 }

@@ -12,6 +12,7 @@ type Router struct {
 	likeHandler    *LikeHandler
 	adminHandler   *AdminHandler
 	imageHandler   *ImageHandler
+	profileHandler *ProfileHandler
 	authMiddleware *AuthMiddleware
 	staticDir      string
 }
@@ -22,6 +23,7 @@ type RouterDeps struct {
 	LikeHandler    *LikeHandler
 	AdminHandler   *AdminHandler
 	ImageHandler   *ImageHandler
+	ProfileHandler *ProfileHandler
 	AuthMiddleware *AuthMiddleware
 	StaticDir      string
 }
@@ -36,6 +38,7 @@ func NewRouter(deps RouterDeps) *Router {
 		likeHandler:    deps.LikeHandler,
 		adminHandler:   deps.AdminHandler,
 		imageHandler:   deps.ImageHandler,
+		profileHandler: deps.ProfileHandler,
 		authMiddleware: deps.AuthMiddleware,
 		staticDir:      deps.StaticDir,
 	}
@@ -56,6 +59,10 @@ func (r *Router) setupRoutes() {
 	r.mux.HandleFunc("/api/feed", r.authMiddleware.Authenticate(r.authMiddleware.RequireAllowedUser(r.postHandler.Feed)))
 	r.mux.HandleFunc("/api/like", r.authMiddleware.Authenticate(r.authMiddleware.RequireAllowedUser(r.likeHandler.Toggle)))
 
+	r.mux.HandleFunc("/api/profile", r.authMiddleware.Authenticate(r.authMiddleware.RequireAllowedUser(r.profileHandler.GetProfile)))
+	r.mux.HandleFunc("/api/profile/update", r.authMiddleware.Authenticate(r.authMiddleware.RequireAllowedUser(r.profileHandler.UpdateProfile)))
+	r.mux.HandleFunc("/api/users/", r.authMiddleware.Authenticate(r.authMiddleware.RequireAllowedUser(r.profileHandler.GetProfileByUsername)))
+
 	r.mux.HandleFunc("/api/admin/users", r.authMiddleware.Authenticate(r.authMiddleware.RequireAdmin(r.adminHandler.Users)))
 	r.mux.HandleFunc("/api/admin/likes", r.authMiddleware.Authenticate(r.authMiddleware.RequireAdmin(r.adminHandler.Likes)))
 	r.mux.HandleFunc("/api/admin/allowed-users", r.authMiddleware.Authenticate(r.authMiddleware.RequireAdmin(r.adminHandler.AllowedUsers)))
@@ -73,6 +80,14 @@ func (r *Router) serveStatic(w http.ResponseWriter, req *http.Request) {
 	}
 	if path == "/admin" || path == "/admin.html" {
 		http.ServeFile(w, req, r.staticDir+"/admin.html")
+		return
+	}
+	if path == "/profile" || path == "/profile.html" {
+		http.ServeFile(w, req, r.staticDir+"/profile.html")
+		return
+	}
+	if strings.HasPrefix(path, "/user/") {
+		http.ServeFile(w, req, r.staticDir+"/user.html")
 		return
 	}
 

@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 )
@@ -65,4 +66,8 @@ func GetStatusCode(err error) int {
 
 func As(err error, target *error) bool {
 	return errors.As(err, target)
+}
+
+func IsNoRows(err error) bool {
+	return errors.Is(err, sql.ErrNoRows)
 }

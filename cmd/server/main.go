@@ -13,6 +13,7 @@ import (
 	appauth "kusovok/internal/application/authapp"
 	likeapp "kusovok/internal/application/likeapp"
 	apppost "kusovok/internal/application/postapp"
+	profileapp "kusovok/internal/application/profileapp"
 	"kusovok/internal/domain/access"
 	"kusovok/internal/domain/like"
 	"kusovok/internal/domain/post"
@@ -92,6 +93,10 @@ func NewApp(cfg *config.Config, db *sql.DB) *App {
 
 	toggleLikeUC := likeapp.NewToggleLikeUseCase(likeDomainService, postDomainService)
 
+	getProfileUC := profileapp.NewGetProfileUseCase(userRepo)
+	getProfileByUsernameUC := profileapp.NewGetProfileByUsernameUseCase(userRepo)
+	updateProfileUC := profileapp.NewUpdateProfileUseCase(userRepo)
+
 	getUsersUC := admin.NewGetUsersUseCase(userRepo)
 	getLikesUC := admin.NewGetLikesUseCase(likeRepo)
 	manageAllowedUC := admin.NewManageAllowedUsersUseCase(accessDomainService)
@@ -101,6 +106,7 @@ func NewApp(cfg *config.Config, db *sql.DB) *App {
 	likeHandler := handlers.NewLikeHandler(toggleLikeUC, handlers.GetLikeMessages(cfg))
 	adminHandler := handlers.NewAdminHandler(getUsersUC, getLikesUC, manageAllowedUC, handlers.GetAdminMessages(cfg))
 	imageHandler := handlers.NewImageHandler(imageStorage)
+	profileHandler := handlers.NewProfileHandler(getProfileUC, getProfileByUsernameUC, updateProfileUC)
 
 	authMiddleware := handlers.NewAuthMiddleware(jwtService, cfg.Auth.CookieName, accessDomainService, handlers.GetAuthMessages(cfg))
 
@@ -110,6 +116,7 @@ func NewApp(cfg *config.Config, db *sql.DB) *App {
 		LikeHandler:    likeHandler,
 		AdminHandler:   adminHandler,
 		ImageHandler:   imageHandler,
+		ProfileHandler: profileHandler,
 		AuthMiddleware: authMiddleware,
 		StaticDir:      "static",
 	})

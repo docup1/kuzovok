@@ -144,6 +144,104 @@ func (r *UserRepository) CountPosts(ctx context.Context, userID int64) (int, err
 	return count, err
 }
 
+func (r *UserRepository) GetProfile(ctx context.Context, userID int64) (*user.Profile, error) {
+	row := r.db.QueryRowContext(ctx,
+		"SELECT user_id, avatar, name, bio, updated_at FROM user_profiles WHERE user_id = ?",
+		userID,
+	)
+
+	var p user.Profile
+	var updatedAt string
+	if err := row.Scan(&p.UserID, &p.Avatar, &p.Name, &p.Bio, &updatedAt); err != nil {
+		return nil, err
+	}
+
+	p.UpdatedAt = parseTimestamp(updatedAt)
+	return &p, nil
+}
+
+func (r *UserRepository) CreateProfile(ctx context.Context, userID int64) error {
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO user_profiles (user_id, avatar) VALUES (?, '🐠')",
+		userID,
+	)
+	return err
+}
+
+func (r *UserRepository) UpdateProfile(ctx context.Context, userID int64, profile *user.Profile) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE user_profiles SET avatar = ?, name = ?, bio = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
+		profile.Avatar, profile.Name, profile.Bio, userID,
+	)
+	return err
+}
+
+func (r *UserRepository) GetProfileWithStats(ctx context.Context, userID int64) (*user.ProfileWithStats, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT 
+			COALESCE(up.user_id, u.id) as user_id,
+			COALESCE(up.avatar, '🐠') as avatar,
+			COALESCE(up.name, '') as name,
+			COALESCE(up.bio, '') as bio,
+			COALESCE(up.updated_at, u.created_at) as updated_at,
+			u.username,
+			u.created_at,
+			(SELECT COUNT(*) FROM posts WHERE user_id = u.id) as post_count,
+			(SELECT COUNT(*) FROM likes WHERE user_id = u.id) as like_count
+		FROM users u
+		LEFT JOIN user_profiles up ON up.user_id = u.id
+		WHERE u.id = ?
+	`, userID)
+
+	var p user.ProfileWithStats
+	var updatedAt string
+	var createdAt string
+
+	if err := row.Scan(
+		&p.UserID, &p.Avatar, &p.Name, &p.Bio, &updatedAt,
+		&p.Username, &createdAt, &p.PostCount, &p.LikeCount,
+	); err != nil {
+		return nil, err
+	}
+
+	p.UpdatedAt = parseTimestamp(updatedAt)
+	p.CreatedAt = parseTimestamp(createdAt).Format("02.01.2006")
+	return &p, nil
+}
+
+func (r *UserRepository) GetProfileWithStatsByUsername(ctx context.Context, username string) (*user.ProfileWithStats, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT 
+			u.id as user_id,
+			COALESCE(up.avatar, '🐠') as avatar,
+			COALESCE(up.name, '') as name,
+			COALESCE(up.bio, '') as bio,
+			COALESCE(up.updated_at, u.created_at) as updated_at,
+			u.username,
+			u.created_at,
+			(SELECT COUNT(*) FROM posts WHERE user_id = u.id) as post_count,
+			(SELECT COUNT(*) FROM likes WHERE user_id = u.id) as like_count
+		FROM users u
+		LEFT JOIN user_profiles up ON up.user_id = u.id
+		WHERE u.username = ?
+	`, username)
+
+	var p user.ProfileWithStats
+	var updatedAt string
+	var createdAt string
+
+	if err := row.Scan(
+		&p.UserID, &p.Avatar, &p.Name, &p.Bio, &updatedAt,
+		&p.Username, &createdAt, &p.PostCount, &p.LikeCount,
+	); err != nil {
+		return nil, err
+	}
+
+	p.UpdatedAt = parseTimestamp(updatedAt)
+	p.CreatedAt = parseTimestamp(createdAt).Format("02.01.2006")
+	return &p, nil
+}
+
 func parseTimestamp(value string) time.Time {
 	layouts := []string{
 		time.RFC3339Nano,
