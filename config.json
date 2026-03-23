@@ -61,5 +61,9 @@
   },
   "cleanup": {
     "interval_minutes": 1
+  },
+  "proxy": {
+    "backend_url": "http://127.0.0.1:8080",
+    "driver": "auto"
   }
 }

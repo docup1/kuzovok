@@ -12,7 +12,7 @@ GOOS ?= freebsd
 GOARCH ?= amd64
 CGO_ENABLED := 0
 
-.PHONY: all build clean fmt run run-proxy run-prod test
+.PHONY: all build clean fmt freebsd run run-proxy run-prod test
 
 all: build
 
@@ -29,13 +29,18 @@ build:
 	$(GO) build -o $(BINARY_NAME) ./cmd/server
 	@echo "Готово: $(BINARY_NAME)"
 
+freebsd:
+	@echo "Сборка под FreeBSD ($(GOARCH))..."
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) $(GO) build -o $(BINARY_NAME) ./cmd/server
+	@echo "Готово: $(BINARY_NAME)"
+
 run:
 	@echo "Backend на http://$(LOCAL_ADDR)"
 	$(GO) run ./cmd/server
 
 run-proxy:
 	@echo "PHP прокси на http://$(PROXY_ADDR)"
-	KUSOVOK_BACKEND_URL=http://$(LOCAL_ADDR) $(PHP) -S $(PROXY_ADDR) index.php
+	$(PHP) -S $(PROXY_ADDR) index.php
 
 run-prod:
 	@echo "Остановка $(BINARY_NAME)..."

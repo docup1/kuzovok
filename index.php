@@ -3,8 +3,11 @@
  * Кузовок - PHP прокси для Go бэкенда
  */
 
-$backend_url = getenv('KUSOVOK_BACKEND_URL') ?: 'http://127.0.0.1:8080';
-$proxy_driver = strtolower(getenv('KUSOVOK_PROXY_DRIVER') ?: 'auto');
+$config_path = __DIR__ . '/config.json';
+$config = file_exists($config_path) ? json_decode(file_get_contents($config_path), true) : [];
+
+$backend_url = $config['proxy']['backend_url'] ?? getenv('KUSOVOK_BACKEND_URL') ?: 'http://127.0.0.1:8080';
+$proxy_driver = strtolower($config['proxy']['driver'] ?? getenv('KUSOVOK_PROXY_DRIVER') ?: 'auto');
 $base_dir = __DIR__;
 $static_dir = $base_dir . '/static';
 $image_dir = $base_dir . '/img';
