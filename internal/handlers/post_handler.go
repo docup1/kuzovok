@@ -5,22 +5,23 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
-	"kusovok/internal/application/postapp"
+	apppost "kusovok/internal/application/postapp"
 	"kusovok/internal/infrastructure/auth"
 	"kusovok/pkg/response"
 )
 
 type PostHandler struct {
-	createUC    *post.CreatePostUseCase
-	feedUC      *post.FeedUseCase
-	userPostsUC *post.UserPostsUseCase
+	createUC    *apppost.CreatePostUseCase
+	feedUC      *apppost.FeedUseCase
+	userPostsUC *apppost.UserPostsUseCase
 	messages    PostMessages
 	cfg         PostConfig
 }
 
-func NewPostHandler(createUC *post.CreatePostUseCase, feedUC *post.FeedUseCase, userPostsUC *post.UserPostsUseCase, messages PostMessages, cfg PostConfig) *PostHandler {
+func NewPostHandler(createUC *apppost.CreatePostUseCase, feedUC *apppost.FeedUseCase, userPostsUC *apppost.UserPostsUseCase, messages PostMessages, cfg PostConfig) *PostHandler {
 	return &PostHandler{
 		createUC:    createUC,
 		feedUC:      feedUC,
@@ -61,6 +62,7 @@ func (h *PostHandler) createPost(w http.ResponseWriter, r *http.Request) {
 	var content string
 	var imageData []byte
 	var imageContentType string
+	var parentPostID *int64
 
 	if strings.HasPrefix(contentType, "multipart/form-data") {
 		var err error
@@ -69,18 +71,21 @@ func (h *PostHandler) createPost(w http.ResponseWriter, r *http.Request) {
 			response.WriteAppError(w, err)
 			return
 		}
+		parentPostID = h.parseParentPostIDFromForm(r)
 	} else {
 		var req struct {
-			Content string `json:"content"`
+			Content      string `json:"content"`
+			ParentPostID *int64 `json:"parent_post_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			response.WriteError(w, http.StatusBadRequest, h.messages.ErrorInvalidData)
 			return
 		}
 		content = req.Content
+		parentPostID = req.ParentPostID
 	}
 
-	post, err := h.createUC.Execute(r.Context(), userID, username, content, imageData, imageContentType)
+	post, err := h.createUC.Execute(r.Context(), userID, username, content, imageData, imageContentType, parentPostID)
 	if err != nil {
 		response.WriteAppError(w, err)
 		return
@@ -160,4 +165,16 @@ func (h *PostHandler) Feed(w http.ResponseWriter, r *http.Request) {
 func isRequestTooLarge(err error) bool {
 	var maxBytesErr *http.MaxBytesError
 	return errors.As(err, &maxBytesErr) || strings.Contains(strings.ToLower(err.Error()), "request body too large")
+}
+
+func (h *PostHandler) parseParentPostIDFromForm(r *http.Request) *int64 {
+	val := r.FormValue("parent_post_id")
+	if val == "" {
+		return nil
+	}
+	id, err := strconv.ParseInt(val, 10, 64)
+	if err != nil || id <= 0 {
+		return nil
+	}
+	return &id
 }

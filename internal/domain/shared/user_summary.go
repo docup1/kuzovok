@@ -13,3 +13,9 @@ type UserSummary struct {
 	Role      string `json:"role"`
 	CreatedAt string `json:"created_at"`
 }
+
+type ParentPostInfo struct {
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+	Content  string `json:"content"`
+}

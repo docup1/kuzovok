@@ -3,6 +3,8 @@ package post
 import (
 	"context"
 	"time"
+
+	"kusovok/internal/domain/shared"
 )
 
 type Repository interface {
@@ -10,6 +12,7 @@ type Repository interface {
 	GetByID(ctx context.Context, id int64) (*Post, error)
 	GetUserPosts(ctx context.Context, userID, currentUserID int64) ([]Post, error)
 	GetFeed(ctx context.Context, currentUserID int64, limit int) ([]Post, error)
+	Exists(ctx context.Context, postID int64) (bool, error)
 	GetExpiredImages(ctx context.Context, now time.Time) ([]ExpiredImage, error)
 	ClearImage(ctx context.Context, postID int64) error
 }
@@ -18,3 +21,5 @@ type ExpiredImage struct {
 	PostID   int64
 	ImageURL string
 }
+
+type ParentPostInfo = shared.ParentPostInfo

@@ -2,7 +2,6 @@ package appauth
 
 import (
 	"context"
-	"errors"
 
 	"kusovok/internal/domain/user"
 	apperrors "kusovok/pkg/errors"
@@ -27,15 +26,12 @@ func (uc *LoginUseCase) Execute(ctx context.Context, username, password string) 
 
 	u, err := uc.userService.Authenticate(ctx, username, password)
 	if err != nil {
-		if errors.Is(err, user.ErrInvalidCredentials) {
-			return "", nil, apperrors.Unauthorized("invalid credentials")
-		}
-		return "", nil, err
+		return "", nil, apperrors.Unauthorized("Неверный логин или пароль")
 	}
 
 	token, err := uc.jwtService.GenerateToken(u.ID, u.Username)
 	if err != nil {
-		return "", nil, err
+		return "", nil, apperrors.Internal("failed to generate token")
 	}
 
 	return token, &user.AuthResponse{

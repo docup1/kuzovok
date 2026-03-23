@@ -3,6 +3,8 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 )
 
@@ -24,9 +26,38 @@ func (m *Migrator) Run() error {
 	if err := m.addAllowedUsersRoleColumn(); err != nil {
 		return err
 	}
+	if err := m.createPostRepliesTable(); err != nil {
+		return err
+	}
 	if err := m.createIndexes(); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (m *Migrator) Backup(dbPath string) error {
+	info, err := os.Stat(dbPath)
+	if err != nil || info.Size() == 0 {
+		return nil
+	}
+
+	src, err := os.Open(dbPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	backupPath := dbPath + ".bak"
+	dst, err := os.Create(backupPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, src); err != nil {
+		return err
+	}
+	fmt.Printf("Бэкап базы создан: %s\n", backupPath)
 	return nil
 }
 
@@ -101,6 +132,19 @@ func (m *Migrator) addAllowedUsersRoleColumn() error {
 	}
 
 	_, err = m.db.Exec("UPDATE allowed_users SET role = 'user' WHERE role IS NULL OR role = ''")
+	return err
+}
+
+func (m *Migrator) createPostRepliesTable() error {
+	_, err := m.db.Exec(`
+		CREATE TABLE IF NOT EXISTS post_replies (
+			post_id INTEGER PRIMARY KEY,
+			parent_post_id INTEGER NOT NULL,
+			FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+			FOREIGN KEY (parent_post_id) REFERENCES posts(id) ON DELETE CASCADE,
+			UNIQUE(post_id)
+		)
+	`)
 	return err
 }
 

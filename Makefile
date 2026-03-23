@@ -31,7 +31,7 @@ build:
 
 freebsd:
 	@echo "Сборка под FreeBSD ($(GOARCH))..."
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) $(GO) build -o $(BINARY_NAME) ./cmd/server
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 $(GO) build -o $(BINARY_NAME) ./cmd/server
 	@echo "Готово: $(BINARY_NAME)"
 
 run:

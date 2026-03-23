@@ -16,6 +16,7 @@ import (
 	"kusovok/internal/domain/access"
 	"kusovok/internal/domain/like"
 	"kusovok/internal/domain/post"
+	"kusovok/internal/domain/reply"
 	userdomain "kusovok/internal/domain/user"
 	"kusovok/internal/handlers"
 	"kusovok/internal/infrastructure/auth"
@@ -49,6 +50,9 @@ func main() {
 	defer db.Close()
 
 	migrator := database.NewMigrator(db)
+	if err := migrator.Backup(cfg.Database.Path); err != nil {
+		log.Printf("backup warning: %v", err)
+	}
 	if err := migrator.Run(); err != nil {
 		log.Fatalf("run migrations: %v", err)
 	}
@@ -65,11 +69,13 @@ func NewApp(cfg *config.Config, db *sql.DB) *App {
 	postRepo := database.NewPostRepository(db)
 	likeRepo := database.NewLikeRepository(db)
 	accessRepo := database.NewAccessRepository(db)
+	replyRepo := database.NewReplyRepository(db)
 
 	userDomainService := userdomain.NewService(userRepo)
 	postDomainService := post.NewService(postRepo, accessRepo)
 	likeDomainService := like.NewService(likeRepo)
 	accessDomainService := access.NewService(accessRepo, userRepo)
+	replyDomainService := reply.NewService(replyRepo, postRepo)
 
 	jwtService := auth.NewJWTService(cfg.Auth.JWTSecret, cfg.Auth.JWTExpireHours)
 	cookieService := handlers.NewCookieService(cfg)
@@ -80,7 +86,7 @@ func NewApp(cfg *config.Config, db *sql.DB) *App {
 	meUC := appauth.NewMeUseCase(userRepo, accessDomainService)
 	appauth.SetAccessDeniedMessage(cfg.Messages.AccessDenied)
 
-	createPostUC := apppost.NewCreatePostUseCase(postDomainService, imageStorage, cfg.Images.LifetimeHours, cfg.Limits.PostContentMaxLength)
+	createPostUC := apppost.NewCreatePostUseCase(postDomainService, replyDomainService, imageStorage, cfg.Images.LifetimeHours, cfg.Limits.PostContentMaxLength)
 	feedUC := apppost.NewFeedUseCase(postDomainService)
 	userPostsUC := apppost.NewUserPostsUseCase(postDomainService)
 

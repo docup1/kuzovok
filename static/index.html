@@ -37,6 +37,11 @@
         .locked-title { font-size: 1.7em; margin-bottom: 14px; color: #d9fbff; }
         .locked-copy { color: rgba(255,255,255,0.72); line-height: 1.7; max-width: 460px; margin: 0 auto; }
         .post-form { margin-bottom: 25px; }
+        .reply-to-block { background: rgba(0, 188, 212, 0.15); border: 1px solid rgba(0, 188, 212, 0.4); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .reply-to-info { display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.9); font-size: 14px; }
+        .reply-to-info strong { color: #7fdbff; }
+        .reply-to-clear { background: rgba(255,255,255,0.15); border: none; color: rgba(255,255,255,0.8); width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; }
+        .reply-to-clear:hover { background: rgba(255,255,255,0.3); }
         .post-attach { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(0, 51, 102, 0.28); border: 1px solid rgba(127, 219, 255, 0.15); }
         .attach-btn, .attach-clear { border: none; cursor: pointer; border-radius: 999px; padding: 8px 14px; font-size: 14px; }
         .attach-btn { background: rgba(0, 188, 212, 0.2); color: #c8f7ff; border: 1px solid rgba(127, 219, 255, 0.25); }
@@ -44,27 +49,32 @@
         .attach-name { color: rgba(255,255,255,0.78); font-size: 14px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .attach-hint { color: rgba(255,255,255,0.5); font-size: 12px; width: 100%; }
         .file-input { display: none; }
-        .post { background: rgba(0, 51, 102, 0.4); border-radius: 15px; padding: 20px; margin-bottom: 15px; border: 1px solid rgba(127, 219, 255, 0.2); }
+        .post { background: rgba(0, 51, 102, 0.4); border-radius: 15px; padding: 20px; margin-bottom: 15px; border: 1px solid rgba(127, 219, 255, 0.2); position: relative; }
         .post-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .post-author { font-weight: 600; color: #7fdbff; }
         .post-author::before { content: "🐟 "; }
         .post-date { font-size: 0.85em; color: rgba(255,255,255,0.5); }
         .post-content { line-height: 1.6; word-wrap: break-word; margin-bottom: 14px; }
         .post-content:last-child { margin-bottom: 0; }
+        .post-parent { background: rgba(0, 188, 212, 0.1); border-left: 3px solid rgba(0, 188, 212, 0.5); padding: 8px 12px; margin-bottom: 12px; border-radius: 0 8px 8px 0; font-size: 14px; color: rgba(255,255,255,0.8); }
+        .post-parent strong { color: #7fdbff; }
         .post-image { position: relative; margin-bottom: 14px; border-radius: 16px; overflow: hidden; border: 1px solid rgba(127, 219, 255, 0.25); background: rgba(0, 25, 51, 0.45); }
         .post-image img { display: block; width: 100%; max-height: 420px; object-fit: cover; }
         .image-timer { position: absolute; top: 12px; right: 12px; padding: 7px 11px; border-radius: 999px; background: rgba(0, 11, 25, 0.78); color: #d8fbff; font-size: 13px; letter-spacing: 0.03em; border: 1px solid rgba(127, 219, 255, 0.18); }
-        .post-footer { margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .post-footer { margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .post-actions { display: flex; gap: 15px; }
         .like-btn { background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 1.2em; display: flex; align-items: center; gap: 5px; }
         .like-btn:hover { color: #ff6b6b; }
         .like-btn.liked { color: #ff6b6b; }
+        .reply-btn { background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 1.2em; display: flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; transition: background 0.2s, color 0.2s; }
+        .reply-btn:hover { background: rgba(0, 188, 212, 0.2); color: #7fdbff; }
         .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
         .tab { flex: 1; padding: 12px; background: rgba(0, 51, 102, 0.3); border: 2px solid rgba(127, 219, 255, 0.3); border-radius: 10px; color: #fff; cursor: pointer; }
         .tab.active { background: rgba(0, 188, 212, 0.3); border-color: #00bcd4; }
         .error { background: rgba(255, 107, 107, 0.2); border: 1px solid rgba(255, 107, 107, 0.5); color: #ff6b6b; padding: 12px; border-radius: 10px; margin-bottom: 20px; }
         .success { background: rgba(102, 252, 185, 0.2); border: 1px solid rgba(102, 252, 185, 0.5); color: #66fcb9; padding: 12px; border-radius: 10px; margin-bottom: 20px; }
         .empty-state { text-align: center; padding: 40px; color: rgba(255,255,255,0.5); }
-        .seaweed { position: fixed; bottom: 0; width: 60px; background: linear-gradient(to top, #2d5016, #4a7c23); border-radius: 50% 50% 0 0; animation: sway 3s ease-in-out infinite; z-index: 0; }
+        .seaweed { position: fixed; bottom: 0; width: 60px; background: linear-gradient(to top, #2d5016, #4a7c23); border-radius: 50% 50% 0 0; animation: sway 3s ease-in-out infinite; z-index: 0; pointer-events: none; }
         @keyframes sway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
         .seaweed:nth-child(1) { left: 5%; height: 150px; }
         .seaweed:nth-child(2) { left: 15%; height: 200px; animation-delay: 0.5s; }
@@ -99,9 +109,18 @@
             <div id="appHeader" class="user-info"><div>Привет, <span id="username"></span>!</div><div class="header-actions"><a id="adminPanelLink" class="btn btn-secondary hidden" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" href="#">Админ панель</a><button class="btn btn-secondary" style="width:auto;padding:10px 20px;" onclick="logout()">Выйти</button></div></div>
             <div id="appContent" class="app-content">
                 <div class="tabs"><button class="tab active" onclick="showFeed()">Лента</button><button class="tab" onclick="showMyPosts()">Мои посты</button></div>
-                <div class="post-form">
+                <div class="post-form" id="postForm">
                     <div id="postSuccess" class="success hidden"></div>
                     <div id="postError" class="error hidden"></div>
+                    <div id="replyToBlock" class="reply-to-block hidden">
+                        <div class="reply-to-info">
+                            <span>↩ Ответ на:</span>
+                            <strong id="replyToUsername"></strong>
+                            <span>—</span>
+                            <span id="replyToContent"></span>
+                        </div>
+                        <button class="reply-to-clear" onclick="clearReplyTo()" title="Убрать ответ">×</button>
+                    </div>
                     <textarea id="postContent" placeholder="Расскажите обитателям океанариума о чём-нибудь..."></textarea>
                     <div class="post-attach">
                         <input id="postImageInput" class="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange="handleImageSelection(event)">
@@ -123,10 +142,10 @@
     <script>
         let currentUser = null;
         let currentTab = "feed";
+        let replyToPostId = null;
         const ACCESS_DENIED_MESSAGE = "извините, вы пока не кузовок";
 
         const API_BASE = resolveBasePath();
-        window.setInterval(updateImageCountdowns, 1000);
 
         function resolveBasePath() {
             const path = window.location.pathname || "/";
@@ -254,6 +273,7 @@
             document.getElementById("postError").classList.add("hidden");
             document.getElementById("postContent").value = "";
             clearSelectedImage();
+            clearReplyTo();
         }
 
         function applyAllowedState() {
@@ -287,6 +307,52 @@
             input.value = "";
             document.getElementById("selectedImageName").textContent = "Без картинки";
             document.getElementById("clearImageButton").classList.add("hidden");
+        }
+
+        function setReplyTo(post) {
+            const block = document.getElementById("replyToBlock");
+            const username = document.getElementById("replyToUsername");
+            const content = document.getElementById("replyToContent");
+
+            if (post && post.id) {
+                replyToPostId = post.id;
+                username.textContent = "@" + post.username;
+                content.textContent = truncateText(post.content, 20);
+                block.classList.remove("hidden");
+                document.getElementById("postContent").focus();
+                scrollToPostForm();
+            } else {
+                replyToPostId = null;
+                block.classList.add("hidden");
+            }
+        }
+
+        function clearReplyTo() {
+            setReplyTo(null);
+        }
+
+        function truncateText(text, maxLength) {
+            if (!text) return "";
+            if (text.length <= maxLength) return "\"" + text + "\"";
+            return "\"" + text.substring(0, maxLength) + "...\"";
+        }
+
+        function scrollToPostForm() {
+            const form = document.getElementById("postForm");
+            if (form) {
+                form.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+        }
+
+        function scrollToPost(postId) {
+            const postElement = document.getElementById("post-" + postId);
+            if (postElement) {
+                postElement.scrollIntoView({ behavior: "smooth", block: "center" });
+                postElement.style.outline = "3px solid #7fdbff";
+                setTimeout(() => {
+                    postElement.style.outline = "";
+                }, 2000);
+            }
         }
 
         async function login() {
@@ -365,14 +431,21 @@
                 const formData = new FormData();
                 formData.append("content", content);
                 formData.append("image", imageFile);
+                if (replyToPostId) {
+                    formData.append("parent_post_id", replyToPostId);
+                }
                 response = await api("/posts", {
                     method: "POST",
                     body: formData
                 });
             } else {
+                const body = { content };
+                if (replyToPostId) {
+                    body.parent_post_id = replyToPostId;
+                }
                 response = await api("/posts", {
                     method: "POST",
-                    body: JSON.stringify({ content })
+                    body: JSON.stringify(body)
                 });
             }
 
@@ -383,6 +456,7 @@
 
             document.getElementById("postContent").value = "";
             clearSelectedImage();
+            clearReplyTo();
             document.getElementById("postSuccess").textContent = "Пост опубликован!";
             document.getElementById("postSuccess").classList.remove("hidden");
             setTimeout(() => document.getElementById("postSuccess").classList.add("hidden"), 3000);
@@ -404,6 +478,8 @@
             }
 
             if (response.success && response.data && response.data.length > 0) {
+                window.postsCache = {};
+                response.data.forEach(post => { window.postsCache[post.id] = post; });
                 container.innerHTML = response.data.map(renderPost).join("");
                 updateImageCountdowns();
                 return;
@@ -417,8 +493,18 @@
             const likedLabel = post.liked ? "Убрать лайк" : "Поставить лайк";
             const contentHtml = post.content ? '<div class="post-content">' + esc(post.content) + '</div>' : "";
             const imageHtml = renderPostImage(post);
+            const parentHtml = renderParentPost(post);
+            const actionsHtml = '<div class="post-actions"><button class="like-btn' + likedClass + '" aria-label="' + likedLabel + '" onclick="likePost(' + post.id + ', this)">❤️ <span>' + post.likes + '</span></button><button class="reply-btn" aria-label="Ответить" onclick="replyToPost(' + post.id + ')">↩</button></div>';
 
-            return '<div class="post"><div class="post-header"><div class="post-author">' + esc(post.username) + '</div><div class="post-date">' + fmt(post.created_at) + '</div></div>' + contentHtml + imageHtml + '<div class="post-footer"><button class="like-btn' + likedClass + '" aria-label="' + likedLabel + '" onclick="likePost(' + post.id + ', this)">❤️ <span>' + post.likes + '</span></button></div></div>';
+            return '<div class="post" id="post-' + post.id + '"><div class="post-header"><div class="post-author">' + esc(post.username) + '</div><div class="post-date">' + fmt(post.created_at) + '</div></div>' + parentHtml + contentHtml + imageHtml + '<div class="post-footer">' + actionsHtml + '</div></div>';
+        }
+
+        function renderParentPost(post) {
+            if (!post.parent_post || !post.parent_post.id) {
+                return "";
+            }
+            const parent = post.parent_post;
+            return '<div class="post-parent" onclick="scrollToPost(' + parent.id + ')" style="cursor:pointer;">↩ Ответ на: <strong>@' + esc(parent.username) + '</strong> — ' + esc(truncateText(parent.content, 20)) + '</div>';
         }
 
         function renderPostImage(post) {
@@ -494,6 +580,18 @@
             }
         }
 
+        function replyToPost(postId) {
+            const postElement = document.getElementById("post-" + postId);
+            if (!postElement) return;
+
+            const postData = window.postsCache && window.postsCache[postId];
+            if (postData) {
+                setReplyTo(postData);
+            }
+        }
+
+        window.postsCache = {};
+
         function showFeed() {
             if (!currentUser || !currentUser.is_allowed) {
                 applyLockedState(currentUser && currentUser.access_message);
@@ -532,6 +630,7 @@
         createBubbles();
         createFish();
         checkAuth();
+        window.setInterval(updateImageCountdowns, 1000);
     </script>
 </body>
 </html>

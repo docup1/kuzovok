@@ -48,24 +48,13 @@ func (r *PostRepository) GetByID(ctx context.Context, id int64) (*post.Post, err
 		id,
 	)
 
-	var p post.Post
-	var createdAt string
-	var likes int
-	var liked int
-	var imageURL sql.NullString
-	var imageExpiresAt sql.NullString
-
-	if err := row.Scan(&p.ID, &p.UserID, &p.Username, &p.Content, &createdAt, &likes, &liked, &imageURL, &imageExpiresAt); err != nil {
+	p, err := r.scanPost(row)
+	if err != nil {
 		return nil, err
 	}
 
-	p.CreatedAt = parseTimestamp(createdAt)
-	p.Likes = likes
-	p.Liked = liked == 1
-	p.ImageURL = nullableStringPointer(imageURL)
-	p.ImageExpiresAt = nullableTimePointer(imageExpiresAt)
-
-	return &p, nil
+	r.fillParentPost(ctx, p)
+	return p, nil
 }
 
 func (r *PostRepository) GetUserPosts(ctx context.Context, userID, currentUserID int64) ([]post.Post, error) {
@@ -105,27 +94,89 @@ func (r *PostRepository) queryPosts(ctx context.Context, query string, args ...i
 
 	var posts []post.Post
 	for rows.Next() {
-		var p post.Post
-		var createdAt string
-		var likes int
-		var liked int
-		var imageURL sql.NullString
-		var imageExpiresAt sql.NullString
-
-		if err := rows.Scan(&p.ID, &p.UserID, &p.Username, &p.Content, &createdAt, &likes, &liked, &imageURL, &imageExpiresAt); err != nil {
+		p, err := r.scanPost(rows)
+		if err != nil {
 			continue
 		}
-
-		p.CreatedAt = parseTimestamp(createdAt)
-		p.Likes = likes
-		p.Liked = liked == 1
-		p.ImageURL = nullableStringPointer(imageURL)
-		p.ImageExpiresAt = nullableTimePointer(imageExpiresAt)
-
-		posts = append(posts, p)
+		posts = append(posts, *p)
 	}
 
-	return posts, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range posts {
+		r.fillParentPost(ctx, &posts[i])
+	}
+
+	return posts, nil
+}
+
+func (r *PostRepository) scanPost(scanner interface{ Scan(...interface{}) error }) (*post.Post, error) {
+	var p post.Post
+	var createdAt string
+	var likes int
+	var liked int
+	var imageURL sql.NullString
+	var imageExpiresAt sql.NullString
+
+	if err := scanner.Scan(&p.ID, &p.UserID, &p.Username, &p.Content, &createdAt, &likes, &liked, &imageURL, &imageExpiresAt); err != nil {
+		return nil, err
+	}
+
+	p.CreatedAt = parseTimestamp(createdAt)
+	p.Likes = likes
+	p.Liked = liked == 1
+	p.ImageURL = nullableStringPointer(imageURL)
+	p.ImageExpiresAt = nullableTimePointer(imageExpiresAt)
+
+	return &p, nil
+}
+
+func (r *PostRepository) fillParentPost(ctx context.Context, p *post.Post) {
+	var parentPostID sql.NullInt64
+	err := r.db.QueryRowContext(ctx,
+		"SELECT parent_post_id FROM post_replies WHERE post_id = ?",
+		p.ID,
+	).Scan(&parentPostID)
+	if err != nil || !parentPostID.Valid {
+		return
+	}
+
+	p.ParentPostID = &parentPostID.Int64
+
+	var parentUsername, parentContent string
+	err = r.db.QueryRowContext(ctx, `
+		SELECT u.username, p.content 
+		FROM posts p 
+		JOIN users u ON p.user_id = u.id 
+		WHERE p.id = ?`,
+		parentPostID.Int64,
+	).Scan(&parentUsername, &parentContent)
+	if err != nil {
+		return
+	}
+
+	p.ParentPost = &post.ParentPostInfo{
+		ID:       parentPostID.Int64,
+		Username: parentUsername,
+		Content:  parentContent,
+	}
+}
+
+func (r *PostRepository) Exists(ctx context.Context, postID int64) (bool, error) {
+	var exists int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT 1 FROM posts WHERE id = ?",
+		postID,
+	).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *PostRepository) GetExpiredImages(ctx context.Context, now time.Time) ([]post.ExpiredImage, error) {

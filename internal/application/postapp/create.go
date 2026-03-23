@@ -5,11 +5,13 @@ import (
 	"time"
 
 	"kusovok/internal/domain/post"
+	"kusovok/internal/domain/reply"
 	apperrors "kusovok/pkg/errors"
 )
 
 type CreatePostUseCase struct {
 	postService   *post.Service
+	replyService  *reply.Service
 	imageStorage  ImageStorage
 	lifetime      time.Duration
 	maxContentLen int
@@ -20,16 +22,17 @@ type ImageStorage interface {
 	Delete(imageURL string) error
 }
 
-func NewCreatePostUseCase(postService *post.Service, imageStorage ImageStorage, lifetimeHours, maxContentLen int) *CreatePostUseCase {
+func NewCreatePostUseCase(postService *post.Service, replyService *reply.Service, imageStorage ImageStorage, lifetimeHours, maxContentLen int) *CreatePostUseCase {
 	return &CreatePostUseCase{
 		postService:   postService,
+		replyService:  replyService,
 		imageStorage:  imageStorage,
 		lifetime:      time.Duration(lifetimeHours) * time.Hour,
 		maxContentLen: maxContentLen,
 	}
 }
 
-func (uc *CreatePostUseCase) Execute(ctx context.Context, userID int64, username string, content string, imageData []byte, imageContentType string) (*post.Post, error) {
+func (uc *CreatePostUseCase) Execute(ctx context.Context, userID int64, username string, content string, imageData []byte, imageContentType string, parentPostID *int64) (*post.Post, error) {
 	content = trimSpace(content)
 
 	if content == "" && len(imageData) == 0 {
@@ -60,6 +63,19 @@ func (uc *CreatePostUseCase) Execute(ctx context.Context, userID int64, username
 			_ = uc.imageStorage.Delete(imageURL)
 		}
 		return nil, err
+	}
+
+	if parentPostID != nil && *parentPostID > 0 {
+		if err := uc.replyService.CreateReply(ctx, p.ID, *parentPostID); err != nil {
+			if imageURL != "" {
+				_ = uc.imageStorage.Delete(imageURL)
+			}
+			return nil, err
+		}
+		reloaded, err := uc.postService.GetByID(ctx, p.ID)
+		if err == nil {
+			p = reloaded
+		}
 	}
 
 	p.Username = username
