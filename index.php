@@ -79,19 +79,8 @@ echo 'Not found: ' . htmlspecialchars($request_uri, ENT_QUOTES, 'UTF-8');
 
 function proxy_api_request(string $proxy_url, string $cookie_path, bool $is_https, string $proxy_driver): void
 {
-    // Force curl for proper method override support
-    $force_stream = false;
-    $force_curl = true;
-
-    if ($force_stream || (!$force_curl && !function_exists('curl_init'))) {
-        proxy_api_request_via_stream($proxy_url, $cookie_path, $is_https);
-        return;
-    }
-
     if (!function_exists('curl_init')) {
-        http_response_code(500);
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => 'cURL extension is required']);
+        proxy_api_request_via_stream($proxy_url, $cookie_path, $is_https);
         return;
     }
 
