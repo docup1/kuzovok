@@ -166,6 +166,14 @@
         const AVATARS = ['🐠', '🐟', '🐡', '🦈', '🐋', '🐙', '🦑', '🦀', '🐚', '🪸', '🐳', '🦐', '🦞', '🐌', '🦑', '🐓', '🦆', '🦅'];
         const API_BASE = (function() {
             const path = window.location.pathname || "/";
+            // Extract base path before /profile
+            const profileIndex = path.indexOf("/profile");
+            if (profileIndex > 0) {
+                const base = path.substring(0, profileIndex);
+                // Decode for comparison
+                const decodedBase = decodeURIComponent(base);
+                return decodedBase;
+            }
             const suffixes = ["/static/index.html", "/static/profile.html", "/index.html", "/profile.html", "/index.php"];
             for (const suffix of suffixes) {
                 if (path.endsWith(suffix)) {
@@ -173,11 +181,6 @@
                 }
             }
             if (path === "/" || path === "/profile" || path === "/profile/") return "";
-            // Extract base path before /profile
-            const profileIndex = path.indexOf("/profile");
-            if (profileIndex > 0) {
-                return path.substring(0, profileIndex);
-            }
             return path.endsWith("/") ? path.slice(0, -1) : path;
         })();
         

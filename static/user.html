@@ -107,6 +107,15 @@
     <script>
         const API_BASE = (function() {
             const path = window.location.pathname || "/";
+            // Decode for processing
+            const decodedPath = decodeURIComponent(path);
+            // Find /user/ pattern and extract base path
+            const userMatch = decodedPath.match(/\/user\/[^/]+/);
+            if (userMatch) {
+                const userIndex = decodedPath.indexOf(userMatch[0]);
+                return userIndex > 0 ? decodedPath.substring(0, userIndex) : "";
+            }
+            // For other paths
             const suffixes = ["/static/index.html", "/static/user.html", "/index.html", "/user.html", "/index.php"];
             for (const suffix of suffixes) {
                 if (path.endsWith(suffix)) {
@@ -114,12 +123,6 @@
                 }
             }
             if (path === "/" || path === "/user" || path === "/user/") return "";
-            // For /user/{username} paths, extract the base path
-            if (path.startsWith("/user/")) {
-                // Find where /user/ starts and take everything before it
-                const userIndex = path.indexOf("/user/");
-                return userIndex > 0 ? path.substring(0, userIndex) : "";
-            }
             return path.endsWith("/") ? path.slice(0, -1) : path;
         })();
         
@@ -133,7 +136,8 @@
         
         function getUsernameFromPath() {
             const path = window.location.pathname || "/";
-            const match = path.match(/\/user\/([^/]+)/);
+            const decodedPath = decodeURIComponent(path);
+            const match = decodedPath.match(/\/user\/([^/]+)/);
             return match ? match[1] : null;
         }
 
@@ -171,18 +175,14 @@
                     headers["Content-Type"] = "application/json";
                 }
                 const url = `${API_BASE}/api${endpoint}`;
-                console.log("API request:", options.method || "GET", url);
                 const response = await fetch(url, {
                     ...options,
                     headers,
                     credentials: "include"
                 });
-                const text = await response.text();
-                console.log("API response:", text.substring(0, 500));
-                return JSON.parse(text);
+                return await response.json();
             } catch (error) {
-                console.error("API error:", error);
-                return { success: false, message: "Ошибка сети: " + error.message };
+                return { success: false, message: "Ошибка сети" };
             }
         }
 
@@ -194,7 +194,6 @@
 
         async function loadUserProfile() {
             const username = getUsernameFromPath();
-            console.log("Username:", username, "API_BASE:", API_BASE);
             if (!username) {
                 showError("Не указан пользователь");
                 return;
