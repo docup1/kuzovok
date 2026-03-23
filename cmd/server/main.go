@@ -50,7 +50,7 @@ func main() {
 	defer db.Close()
 
 	migrator := database.NewMigrator(db)
-	if err := migrator.Backup(cfg.Database.Path); err != nil {
+	if err := migrator.Backup(cfg.Database.Path, cfg.Database.BackupDir); err != nil {
 		log.Printf("backup warning: %v", err)
 	}
 	if err := migrator.Run(); err != nil {

@@ -23,6 +23,7 @@ type ServerConfig struct {
 type DatabaseConfig struct {
 	Path         string `json:"path"`
 	MaxOpenConns int    `json:"max_open_conns"`
+	BackupDir    string `json:"backup_dir"`
 }
 
 type AuthConfig struct {
@@ -112,6 +113,9 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Database.MaxOpenConns == 0 {
 		cfg.Database.MaxOpenConns = 1
+	}
+	if cfg.Database.BackupDir == "" {
+		cfg.Database.BackupDir = "./backups"
 	}
 	if cfg.Auth.JWTExpireHours == 0 {
 		cfg.Auth.JWTExpireHours = 24

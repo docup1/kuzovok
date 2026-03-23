@@ -1,10 +1,14 @@
 .DS_Store
+.idea
+.vscode
 
 kusovok.db
 kusovok.db.bak
 *.db
 *.db-shm
 *.db-wal
+
+backups/
 
 img/*
 !img/.gitkeep

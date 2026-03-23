@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 type Migrator struct {
@@ -35,11 +36,18 @@ func (m *Migrator) Run() error {
 	return nil
 }
 
-func (m *Migrator) Backup(dbPath string) error {
+func (m *Migrator) Backup(dbPath, backupDir string) error {
 	info, err := os.Stat(dbPath)
 	if err != nil || info.Size() == 0 {
 		return nil
 	}
+
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		return err
+	}
+
+	timestamp := time.Now().Format("2006-01-02_150405")
+	backupPath := fmt.Sprintf("%s/kusovok_%s.db", backupDir, timestamp)
 
 	src, err := os.Open(dbPath)
 	if err != nil {
@@ -47,7 +55,6 @@ func (m *Migrator) Backup(dbPath string) error {
 	}
 	defer src.Close()
 
-	backupPath := dbPath + ".bak"
 	dst, err := os.Create(backupPath)
 	if err != nil {
 		return err

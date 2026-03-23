@@ -5,7 +5,8 @@
   },
   "database": {
     "path": "./kusovok.db",
-    "max_open_conns": 1
+    "max_open_conns": 1,
+    "backup_dir": "./backups"
   },
   "auth": {
     "jwt_secret": "kusovok-secret-key-change-in-production",
