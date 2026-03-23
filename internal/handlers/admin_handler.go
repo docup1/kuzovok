@@ -109,16 +109,14 @@ func (h *AdminHandler) AllowedUserItem(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodPatch, http.MethodPost:
-		if len(parts) != 2 || parts[1] != "role" {
+		if len(parts) == 2 && parts[1] == "role" {
+			h.updateRole(w, r, userID)
+		} else if len(parts) == 2 && parts[1] == "remove" {
+			h.removeUser(w, r, userID)
+		} else {
 			response.WriteError(w, http.StatusNotFound, h.messages.ErrorRouteNotFound)
-			return
 		}
-		h.updateRole(w, r, userID)
 	case http.MethodDelete:
-		if len(parts) != 1 {
-			response.WriteError(w, http.StatusNotFound, h.messages.ErrorRouteNotFound)
-			return
-		}
 		h.removeUser(w, r, userID)
 	default:
 		response.WriteError(w, http.StatusMethodNotAllowed, h.messages.ErrorInvalidData)
