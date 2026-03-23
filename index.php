@@ -33,6 +33,18 @@ if ($relative_path === '' || $relative_path === '/') {
 
 // Handle API requests - proxy to backend
 if (strpos($relative_path, '/api/') === 0) {
+    // Override PUT/PATCH/DELETE methods due to server restrictions
+    // Store original method globally for proxy functions to use
+    $GLOBALS['ORIGINAL_REQUEST_METHOD'] = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    // For PUT/PATCH/DELETE, add _method to body
+    if (in_array($GLOBALS['ORIGINAL_REQUEST_METHOD'], ['PUT', 'PATCH', 'DELETE'])) {
+        $raw_body = file_get_contents('php://input');
+        if ($raw_body) {
+            $data = json_decode($raw_body, true) ?? [];
+            $data['_method'] = $GLOBALS['ORIGINAL_REQUEST_METHOD'];
+            $_POST['_method_json'] = json_encode($data);
+        }
+    }
     proxy_api_request($backend_url . $relative_path, $cookie_path, $is_https, $proxy_driver);
     exit;
 }
@@ -67,8 +79,9 @@ echo 'Not found: ' . htmlspecialchars($request_uri, ENT_QUOTES, 'UTF-8');
 
 function proxy_api_request(string $proxy_url, string $cookie_path, bool $is_https, string $proxy_driver): void
 {
-    $force_stream = $proxy_driver === 'stream';
-    $force_curl = $proxy_driver === 'curl';
+    // Force curl for proper method override support
+    $force_stream = false;
+    $force_curl = true;
 
     if ($force_stream || (!$force_curl && !function_exists('curl_init'))) {
         proxy_api_request_via_stream($proxy_url, $cookie_path, $is_https);
@@ -82,11 +95,15 @@ function proxy_api_request(string $proxy_url, string $cookie_path, bool $is_http
         return;
     }
 
-    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    $method = $GLOBALS['ORIGINAL_REQUEST_METHOD'] ?? $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $response_headers = [];
     $ch = curl_init($proxy_url);
 
-    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+    // Send original method via header (for server restrictions)
+    if ($method !== 'GET' && $method !== 'POST') {
+        $forward_headers[] = 'X-HTTP-Method-Override: ' . $method;
+    }
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
@@ -110,6 +127,8 @@ function proxy_api_request(string $proxy_url, string $cookie_path, bool $is_http
     if (!empty($_FILES)) {
         $post_fields = build_multipart_fields($_POST, $_FILES);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $post_fields);
+    } elseif (!empty($_POST['_method_json'])) {
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $_POST['_method_json']);
     } else {
         $content = file_get_contents('php://input');
         if ($content !== false && strlen($content) > 0) {
@@ -138,9 +157,12 @@ function proxy_api_request(string $proxy_url, string $cookie_path, bool $is_http
 
 function proxy_api_request_via_stream(string $proxy_url, string $cookie_path, bool $is_https): void
 {
-    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    $method = $GLOBALS['ORIGINAL_REQUEST_METHOD'] ?? $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $body = '';
     $content_type = $_SERVER['CONTENT_TYPE'] ?? null;
+    
+    // Add X-HTTP-Method-Override header for non-GET/POST methods
+    $override_method = ($method !== 'GET' && $method !== 'POST') ? $method : null;
 
     if (!empty($_FILES)) {
         $multipart_payload = build_stream_multipart_payload($_POST, $_FILES);

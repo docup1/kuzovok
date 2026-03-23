@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 
@@ -61,15 +62,37 @@ func (h *ProfileHandler) GetProfileByUsername(w http.ResponseWriter, r *http.Req
 }
 
 func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
+	// Support _method override for proxy compatibility
+	method := r.Method
+	if method != http.MethodPut && method != http.MethodPost {
 		response.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	userID := auth.GetUserIDFromRequest(r)
 
+	// Read body first to check for _method
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		response.WriteError(w, http.StatusBadRequest, "failed to read body")
+		return
+	}
+
+	// Check if _method is in body (for POST with method override)
+	var methodCheck struct {
+		Method string `json:"_method"`
+	}
+	if err := json.Unmarshal(body, &methodCheck); err == nil && methodCheck.Method != "" {
+		method = methodCheck.Method
+	}
+
+	if method != http.MethodPut {
+		response.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
 	var req user.UpdateProfileRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
 		response.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
