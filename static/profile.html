@@ -404,8 +404,8 @@
             const name = document.getElementById("editName").value.trim();
             const bio = document.getElementById("editBio").value.trim();
             const response = await api("/profile/update", {
-                method: "PUT",
-                body: JSON.stringify({ avatar: selectedAvatar, name: name, bio: bio })
+                method: "POST",
+                body: JSON.stringify({ _method: "PUT", avatar: selectedAvatar, name: name, bio: bio })
             });
             if (response.success && response.data) {
                 closeEditModal();
