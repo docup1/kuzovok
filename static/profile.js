@@ -23,7 +23,8 @@
         profileError: document.getElementById("profileError"),
         profileName: document.getElementById("profileName"),
         profileSuccess: document.getElementById("profileSuccess"),
-        profileUsername: document.getElementById("profileUsername")
+        profileUsername: document.getElementById("profileUsername"),
+        siteLogo: document.getElementById("siteLogo")
     };
 
     function flashMessage(element, message, timeout) {
@@ -186,6 +187,7 @@
 
     function init() {
         shared.bootOceanScene({ bubbleCount: 10, fishCount: 3, fishSizeRange: 20, fishDurationRange: 12 });
+        elements.siteLogo.src = shared.logoUrl();
         elements.logoLink.href = shared.homeUrl();
         elements.backLink.href = shared.homeUrl();
         elements.authRequiredLoginLink.href = shared.homeUrl();

@@ -128,6 +128,15 @@
         return buildPath("/admin");
     }
 
+    function staticAsset(relativePath) {
+        const normalized = String(relativePath || "").replace(/^\/+/, "");
+        return buildPath(`/static/${normalized}`);
+    }
+
+    function logoUrl() {
+        return staticAsset(`img/${encodeURIComponent("кузовочек.png")}`);
+    }
+
     function renderPostImage(post, altText) {
         if (!post.image_url || !post.image_expires_at) {
             return "";
@@ -250,10 +259,12 @@
         formatDate,
         highlightNode,
         homeUrl,
+        logoUrl,
         profileUrl,
         renderParentPost,
         renderPostImage,
         resolveMediaUrl,
+        staticAsset,
         syncImageCountdowns,
         truncateQuoted,
         updateLikeButton,

@@ -448,7 +448,7 @@ function serve_local_file(string $base_dir, string $request_uri, bool $no_store)
         return;
     }
 
-    $relative_path = ltrim($request_uri, '/');
+    $relative_path = rawurldecode(ltrim($request_uri, '/'));
     if (strpos($relative_path, 'img/') === 0) {
         $relative_path = substr($relative_path, 4);
     }

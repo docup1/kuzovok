@@ -14,7 +14,8 @@
         profileBio: document.getElementById("profileBio"),
         profileContent: document.getElementById("profileContent"),
         profileName: document.getElementById("profileName"),
-        profileUsername: document.getElementById("profileUsername")
+        profileUsername: document.getElementById("profileUsername"),
+        siteLogo: document.getElementById("siteLogo")
     };
 
     function getUsernameFromPath() {
@@ -132,6 +133,7 @@
 
     function init() {
         shared.bootOceanScene({ bubbleCount: 10, fishCount: 3, fishSizeRange: 20, fishDurationRange: 12 });
+        elements.siteLogo.src = shared.logoUrl();
         elements.logoLink.href = shared.homeUrl();
         elements.backLink.href = shared.homeUrl();
         elements.errorBackLink.href = shared.homeUrl();

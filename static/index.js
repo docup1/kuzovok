@@ -35,6 +35,7 @@
         registerError: document.getElementById("registerError"),
         registerForm: document.getElementById("registerForm"),
         registerToggleLink: document.getElementById("showLoginLink"),
+        siteLogo: document.getElementById("siteLogo"),
         username: document.getElementById("username")
     };
 
@@ -400,6 +401,7 @@
 
     function init() {
         shared.bootOceanScene({ bubbleCount: 15, fishCount: 5, fishSizeRange: 30, fishDurationRange: 15 });
+        elements.siteLogo.src = shared.logoUrl();
         elements.profileLink.href = shared.profileUrl();
         bindEvents();
         checkAuth();
