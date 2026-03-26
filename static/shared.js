@@ -134,7 +134,7 @@
     }
 
     function logoUrl() {
-        return staticAsset(`img/${encodeURIComponent("кузовочек.png")}`);
+        return staticAsset("img/kuzovochek.png");
     }
 
     function renderPostImage(post, altText) {
