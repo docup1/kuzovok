@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"path/filepath"
 	"strings"
 )
 
@@ -88,6 +89,17 @@ func (r *Router) serveStatic(w http.ResponseWriter, req *http.Request) {
 	}
 	if strings.HasPrefix(path, "/user/") {
 		http.ServeFile(w, req, r.staticDir+"/user.html")
+		return
+	}
+
+	if strings.HasPrefix(req.URL.Path, "/static/") {
+		relativePath := strings.TrimPrefix(req.URL.Path, "/static/")
+		if relativePath == "" || strings.Contains(relativePath, "..") {
+			http.NotFound(w, req)
+			return
+		}
+
+		http.ServeFile(w, req, filepath.Join(r.staticDir, relativePath))
 		return
 	}
 

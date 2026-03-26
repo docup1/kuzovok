@@ -55,6 +55,12 @@ if (strpos($relative_path, '/img/') === 0) {
     exit;
 }
 
+// Handle static assets - serve locally from ./static
+if (strpos($relative_path, '/static/') === 0) {
+    serve_local_file($static_dir, substr($relative_path, strlen('/static')), false);
+    exit;
+}
+
 // Route static pages
 if ($relative_path === '/admin' || $relative_path === '/admin/' || $relative_path === '/admin.html') {
     $file_path = $static_dir . '/admin.html';

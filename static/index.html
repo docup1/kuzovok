@@ -1,151 +1,144 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-page="home">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Кузовок</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: sans-serif; min-height: 100vh; background: linear-gradient(180deg, #006994 0%, #003366 50%, #001a33 100%); color: #fff; }
-        .ocean-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
-        .bubble { position: absolute; background: rgba(255,255,255,0.1); border-radius: 50%; animation: rise 8s infinite ease-in; }
-        @keyframes rise { 0% { transform: translateY(100vh) scale(1); opacity: 0; } 50% { opacity: 0.5; } 100% { transform: translateY(-100px) scale(1.2); opacity: 0; } }
-        .fish { position: absolute; animation: swim 20s infinite linear; opacity: 0.6; font-size: 24px; }
-        @keyframes swim { 0% { transform: translateX(100vw); } 100% { transform: translateX(-100px); } }
-        .container { position: relative; z-index: 1; max-width: 700px; margin: 0 auto; padding: 20px; }
-        header { text-align: center; padding: 30px 0; }
-        .logo { font-size: 3em; display: inline-block; animation: float 3s ease-in-out infinite; }
-        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-        h1 { font-size: 2.5em; text-shadow: 0 0 20px rgba(0,255,255,0.5); margin-top: 10px; }
-        .auth-container, .app-container { background: rgba(0, 105, 148, 0.3); backdrop-filter: blur(10px); border-radius: 20px; padding: 30px; margin-top: 20px; border: 1px solid rgba(255,255,255,0.1); }
-        .hidden { display: none !important; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; font-weight: 500; color: #7fdbff; }
-        input, textarea { width: 100%; padding: 12px 15px; border: 2px solid rgba(127, 219, 255, 0.3); border-radius: 10px; background: rgba(0, 51, 102, 0.5); color: #fff; font-size: 16px; }
-        input:focus, textarea:focus { outline: none; border-color: #7fdbff; }
-        textarea { resize: vertical; min-height: 100px; }
-        .btn { background: linear-gradient(135deg, #00bcd4 0%, #0097a7 100%); color: #fff; border: none; padding: 14px 30px; border-radius: 25px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; transition: transform 0.2s; }
-        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0, 188, 212, 0.4); }
-        .btn-secondary { background: linear-gradient(135deg, #5c6bc0 0%, #3949ab 100%); }
-        .auth-toggle { text-align: center; margin-top: 20px; color: rgba(255,255,255,0.7); }
-        .auth-toggle a { color: #7fdbff; text-decoration: none; cursor: pointer; }
-        .user-info { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; gap: 16px; }
-        .user-info span { color: #7fdbff; }
-        .header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        .app-content { display: block; }
-        .locked-state { padding: 36px 24px; border-radius: 18px; border: 1px solid rgba(127, 219, 255, 0.16); background: rgba(0, 25, 51, 0.32); text-align: center; }
-        .locked-title { font-size: 1.7em; margin-bottom: 14px; color: #d9fbff; }
-        .locked-copy { color: rgba(255,255,255,0.72); line-height: 1.7; max-width: 460px; margin: 0 auto; }
-        .post-form { margin-bottom: 25px; }
-        .reply-to-block { background: rgba(0, 188, 212, 0.15); border: 1px solid rgba(0, 188, 212, 0.4); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .reply-to-info { display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.9); font-size: 14px; }
-        .reply-to-info strong { color: #7fdbff; }
-        .reply-to-clear { background: rgba(255,255,255,0.15); border: none; color: rgba(255,255,255,0.8); width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; }
-        .reply-to-clear:hover { background: rgba(255,255,255,0.3); }
-        .post-attach { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(0, 51, 102, 0.28); border: 1px solid rgba(127, 219, 255, 0.15); }
-        .attach-btn, .attach-clear { border: none; cursor: pointer; border-radius: 999px; padding: 8px 14px; font-size: 14px; }
-        .attach-btn { background: rgba(0, 188, 212, 0.2); color: #c8f7ff; border: 1px solid rgba(127, 219, 255, 0.25); }
-        .attach-clear { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.8); }
-        .attach-name { color: rgba(255,255,255,0.78); font-size: 14px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .attach-hint { color: rgba(255,255,255,0.5); font-size: 12px; width: 100%; }
-        .file-input { display: none; }
-        .post { background: rgba(0, 51, 102, 0.4); border-radius: 15px; padding: 20px; margin-bottom: 15px; border: 1px solid rgba(127, 219, 255, 0.2); position: relative; }
-        .post-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .post-author { font-weight: 600; color: #7fdbff; display: flex; align-items: center; gap: 8px; }
-        .post-author::before { content: ""; }
-        .post-author-avatar { font-size: 1.1em; }
-        .post-author a { color: #7fdbff; text-decoration: none; }
-        .post-author a:hover { text-decoration: underline; }
-        .post-parent .post-author-avatar { font-size: 1em; margin-right: 4px; }
-        .post-parent a { color: #7fdbff; text-decoration: none; }
-        .post-parent a:hover { text-decoration: underline; }
-        .post-date { font-size: 0.85em; color: rgba(255,255,255,0.5); }
-        .post-content { line-height: 1.6; word-wrap: break-word; margin-bottom: 14px; }
-        .post-content:last-child { margin-bottom: 0; }
-        .post-parent { background: rgba(0, 188, 212, 0.1); border-left: 3px solid rgba(0, 188, 212, 0.5); padding: 8px 12px; margin-bottom: 12px; border-radius: 0 8px 8px 0; font-size: 14px; color: rgba(255,255,255,0.8); }
-        .post-parent strong { color: #7fdbff; }
-        .post-image { position: relative; margin-bottom: 14px; border-radius: 16px; overflow: hidden; border: 1px solid rgba(127, 219, 255, 0.25); background: rgba(0, 25, 51, 0.45); }
-        .post-image img { display: block; width: 100%; max-height: 420px; object-fit: cover; }
-        .image-timer { position: absolute; top: 12px; right: 12px; padding: 7px 11px; border-radius: 999px; background: rgba(0, 11, 25, 0.78); color: #d8fbff; font-size: 13px; letter-spacing: 0.03em; border: 1px solid rgba(127, 219, 255, 0.18); }
-        .post-footer { margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
-        .post-actions { display: flex; gap: 15px; }
-        .like-btn { background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 1.2em; display: flex; align-items: center; gap: 5px; }
-        .like-btn:hover { color: #ff6b6b; }
-        .like-btn.liked { color: #ff6b6b; }
-        .reply-btn { background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 1.2em; display: flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; transition: background 0.2s, color 0.2s; }
-        .reply-btn:hover { background: rgba(0, 188, 212, 0.2); color: #7fdbff; }
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab { flex: 1; padding: 12px; background: rgba(0, 51, 102, 0.3); border: 2px solid rgba(127, 219, 255, 0.3); border-radius: 10px; color: #fff; cursor: pointer; }
-        .tab.active { background: rgba(0, 188, 212, 0.3); border-color: #00bcd4; }
-        .error { background: rgba(255, 107, 107, 0.2); border: 1px solid rgba(255, 107, 107, 0.5); color: #ff6b6b; padding: 12px; border-radius: 10px; margin-bottom: 20px; }
-        .success { background: rgba(102, 252, 185, 0.2); border: 1px solid rgba(102, 252, 185, 0.5); color: #66fcb9; padding: 12px; border-radius: 10px; margin-bottom: 20px; }
-        .empty-state { text-align: center; padding: 40px; color: rgba(255,255,255,0.5); }
-        .seaweed { position: fixed; bottom: 0; width: 60px; background: linear-gradient(to top, #2d5016, #4a7c23); border-radius: 50% 50% 0 0; animation: sway 3s ease-in-out infinite; z-index: 0; pointer-events: none; }
-        @keyframes sway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
-        .seaweed:nth-child(1) { left: 5%; height: 150px; }
-        .seaweed:nth-child(2) { left: 15%; height: 200px; animation-delay: 0.5s; }
-        .seaweed:nth-child(3) { right: 15%; height: 180px; animation-delay: 1s; }
-        .seaweed:nth-child(4) { right: 5%; height: 160px; animation-delay: 1.5s; }
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 26, 51, 0.85); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: opacity 0.25s, visibility 0.25s; }
-        .modal-overlay.active { opacity: 1; visibility: visible; }
-        .modal { background: rgba(0, 77, 128, 0.95); border: 1px solid rgba(127, 219, 255, 0.3); border-radius: 20px; width: 90%; max-width: 500px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; transform: translateY(20px); transition: transform 0.25s; }
-        .modal-overlay.active .modal { transform: translateY(0); }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid rgba(127, 219, 255, 0.2); }
-        .modal-header span { font-size: 1.2em; font-weight: 600; color: #d9fbff; }
-        .modal-close { background: rgba(255,255,255,0.1); border: none; color: rgba(255,255,255,0.8); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
-        .modal-close:hover { background: rgba(255,255,255,0.2); }
-        .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
-        .modal-body textarea { width: 100%; min-height: 120px; resize: vertical; }
-        .modal-footer { padding: 15px 20px; border-top: 1px solid rgba(127, 219, 255, 0.2); }
-        .create-btn { background: linear-gradient(135deg, #00bcd4 0%, #0097a7 100%); color: #fff; border: none; padding: 12px 20px; border-radius: 999px; font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; display: flex; align-items: center; gap: 6px; }
-        .create-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0, 188, 212, 0.4); }
-        .create-btn::before { content: "+"; font-size: 1.3em; line-height: 1; }
-        .modal-attach { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(0, 51, 102, 0.28); border: 1px solid rgba(127, 219, 255, 0.15); }
-        .modal-image-preview { max-width: 100%; max-height: 200px; border-radius: 12px; margin-top: 12px; object-fit: cover; display: none; }
-    </style>
+    <script>
+        (function (window, document) {
+            const page = document.documentElement.dataset.page;
+            const path = window.location.pathname || "/";
+
+            function trimSuffixes(suffixes) {
+                for (const suffix of suffixes) {
+                    if (path === suffix) {
+                        return "";
+                    }
+                    if (path.endsWith(suffix)) {
+                        return path.slice(0, -suffix.length);
+                    }
+                }
+                if (path === "/") {
+                    return "";
+                }
+                return path.endsWith("/") ? path.slice(0, -1) : path;
+            }
+
+            let basePath = "";
+            if (page === "profile") {
+                basePath = trimSuffixes(["/static/profile.html", "/profile.html", "/profile/", "/profile"]);
+            } else if (page === "admin") {
+                basePath = trimSuffixes(["/static/admin.html", "/admin.html", "/admin/", "/admin"]);
+            } else if (page === "user") {
+                const match = path.match(/\/user\/[^/]+\/?$/);
+                basePath = match ? path.slice(0, -match[0].length) : trimSuffixes(["/static/user.html", "/user.html"]);
+            } else {
+                basePath = trimSuffixes(["/static/index.html", "/index.html", "/index.php"]);
+            }
+
+            window.__KUZOVOK_BASE_PATH__ = basePath;
+
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = `${basePath}/static/app.css`;
+            document.head.appendChild(link);
+
+            window.__loadKuzovokScripts__ = function (scripts) {
+                return scripts.reduce((promise, scriptName) => {
+                    return promise.then(() => new Promise((resolve, reject) => {
+                        const script = document.createElement("script");
+                        script.src = `${basePath}/static/${scriptName}`;
+                        script.async = false;
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.body.appendChild(script);
+                    }));
+                }, Promise.resolve());
+            };
+        })(window, document);
+    </script>
 </head>
 <body>
     <div class="ocean-bg" id="oceanBg"></div>
-    <div class="seaweed"></div><div class="seaweed"></div><div class="seaweed"></div><div class="seaweed"></div>
-    <div class="container">
-        <header><div class="logo">🐠</div><h1>Кузовок</h1><p style="color:rgba(255,255,255,0.7);margin-top:10px;">Социальная сеть океанариума</p></header>
-        <div id="authContainer" class="auth-container">
+    <div class="seaweed seaweed--left"></div>
+    <div class="seaweed"></div>
+    <div class="seaweed"></div>
+    <div class="seaweed"></div>
+
+    <main class="page-shell page-shell--narrow">
+        <header class="home-header">
+            <div class="logo">🐠</div>
+            <h1 class="page-title">Кузовок</h1>
+            <p class="page-subtitle">Социальная сеть океанариума</p>
+        </header>
+
+        <section id="authContainer" class="auth-panel">
             <div id="loginForm">
-                <h2 style="margin-bottom:25px;text-align:center;">Вход</h2>
-                <div id="loginError" class="error hidden"></div>
-                <div class="form-group"><label>Логин</label><input type="text" id="loginUsername" placeholder="fish"></div>
-                <div class="form-group"><label>Пароль</label><input type="password" id="loginPassword" placeholder="******"></div>
-                <button class="btn" onclick="login()">Войти</button>
-                <div class="auth-toggle">Нет аккаунта? <a onclick="showRegister()">Зарегистрироваться</a></div>
-            </div>
-            <div id="registerForm" class="hidden">
-                <h2 style="margin-bottom:25px;text-align:center;">Регистрация</h2>
-                <div id="registerError" class="error hidden"></div>
-                <div class="form-group"><label>Логин</label><input type="text" id="regUsername" placeholder="fish"></div>
-                <div class="form-group"><label>Пароль</label><input type="password" id="regPassword" placeholder="******"></div>
-                <button class="btn" onclick="register()">Создать аккаунт</button>
-                <div class="auth-toggle">Уже есть аккаунт? <a onclick="showLogin()">Войти</a></div>
-            </div>
-        </div>
-        <div id="appContainer" class="app-container hidden">
-            <div id="appHeader" class="user-info"><div>Привет, <span id="username"></span>!</div><div class="header-actions"><a id="adminPanelLink" class="btn btn-secondary hidden" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" href="#">Админ панель</a><a class="btn btn-secondary" style="width:auto;padding:10px 20px;display:inline-flex;text-decoration:none;" id="profileLink" href="/profile">Профиль</a><button class="btn btn-secondary" style="width:auto;padding:10px 20px;" onclick="logout()">Выйти</button></div></div>
-            <div id="appContent" class="app-content">
-                <div style="display:flex;justify-content:flex-end;margin-bottom:15px;">
-                    <button class="create-btn" onclick="openPostModal()">Новый пост</button>
+                <h2 class="auth-title">Вход</h2>
+                <div id="loginError" class="message error hidden"></div>
+                <div class="form-group">
+                    <label for="loginUsername">Логин</label>
+                    <input type="text" id="loginUsername" placeholder="fish">
                 </div>
-                <div id="postsContainer"></div>
+                <div class="form-group">
+                    <label for="loginPassword">Пароль</label>
+                    <input type="password" id="loginPassword" placeholder="******">
+                </div>
+                <button id="loginButton" class="btn btn-primary full-width" type="button">Войти</button>
+                <div class="auth-toggle">
+                    Нет аккаунта?
+                    <button id="showRegisterLink" class="text-link-button" type="button">Зарегистрироваться</button>
+                </div>
             </div>
+
+            <div id="registerForm" class="hidden">
+                <h2 class="auth-title">Регистрация</h2>
+                <div id="registerError" class="message error hidden"></div>
+                <div class="form-group">
+                    <label for="regUsername">Логин</label>
+                    <input type="text" id="regUsername" placeholder="fish">
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">Пароль</label>
+                    <input type="password" id="regPassword" placeholder="******">
+                </div>
+                <button id="registerButton" class="btn btn-primary full-width" type="button">Создать аккаунт</button>
+                <div class="auth-toggle">
+                    Уже есть аккаунт?
+                    <button id="showLoginLink" class="text-link-button" type="button">Войти</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="appContainer" class="app-panel hidden">
+            <div id="appHeader" class="user-info">
+                <div>Привет, <strong id="username"></strong>!</div>
+                <div class="header-actions">
+                    <a id="adminPanelLink" class="btn btn-secondary header-button hidden" href="#">Админ панель</a>
+                    <a id="profileLink" class="btn btn-secondary header-button" href="#">Профиль</a>
+                    <button id="logoutButton" class="btn btn-secondary header-button" type="button">Выйти</button>
+                </div>
+            </div>
+
+            <div id="appContent">
+                <div class="create-row">
+                    <button id="openCreatePostButton" class="create-btn" type="button">Новый пост</button>
+                </div>
+                <div id="postsContainer" class="posts-list"></div>
+            </div>
+
             <div id="lockedState" class="locked-state hidden">
                 <div class="locked-title">Доступ пока закрыт</div>
                 <div id="lockedMessage" class="locked-copy">извините, вы пока не кузовок</div>
             </div>
-        </div>
-    </div>
-    <div class="modal-overlay" id="postModal" onclick="if(event.target===this)closePostModal()">
+        </section>
+    </main>
+
+    <div id="postModal" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
                 <span id="modalTitle">Новый пост</span>
-                <button class="modal-close" onclick="closePostModal()">×</button>
+                <button id="modalCloseButton" class="modal-close" type="button">×</button>
             </div>
             <div class="modal-body">
                 <div id="modalReplyBlock" class="reply-to-block hidden">
@@ -155,620 +148,32 @@
                         <span>—</span>
                         <span id="modalReplyContent"></span>
                     </div>
-                    <button class="reply-to-clear" onclick="clearModalReply()">×</button>
+                    <button id="clearModalReplyButton" class="reply-to-clear" type="button">×</button>
                 </div>
-                <div id="modalPostSuccess" class="success hidden"></div>
-                <div id="modalPostError" class="error hidden"></div>
+
+                <div id="modalPostSuccess" class="message success hidden"></div>
+                <div id="modalPostError" class="message error hidden"></div>
+
                 <textarea id="modalPostContent" placeholder="Расскажите обитателям океанариума о чём-нибудь..."></textarea>
+
                 <div class="modal-attach">
-                    <input id="modalPostImageInput" class="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange="handleModalImageSelection(event)">
-                    <button class="attach-btn" type="button" onclick="document.getElementById('modalPostImageInput').click()">📷 Добавить картинку</button>
+                    <input id="modalPostImageInput" class="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
+                    <button id="openModalImageButton" class="attach-btn" type="button">📷 Добавить картинку</button>
                     <span id="modalSelectedImageName" class="attach-name">Без картинки</span>
-                    <button id="modalClearImageButton" class="attach-clear hidden" type="button" onclick="clearModalImage()">Убрать</button>
+                    <button id="modalClearImageButton" class="attach-clear hidden" type="button">Убрать</button>
                     <div class="attach-hint">Картинка хранится 24 часа.</div>
                 </div>
+
                 <img id="modalImagePreview" class="modal-image-preview" alt="Превью">
             </div>
             <div class="modal-footer">
-                <button class="btn" onclick="submitFromModal()">Опубликовать</button>
+                <button id="modalSubmitButton" class="btn btn-primary full-width" type="button">Опубликовать</button>
             </div>
         </div>
     </div>
+
     <script>
-        let currentUser = null;
-        const ACCESS_DENIED_MESSAGE = "извините, вы пока не кузовок";
-
-        const API_BASE = resolveBasePath();
-
-        function resolveBasePath() {
-            const path = window.location.pathname || "/";
-            const suffixes = ["/static/index.html", "/index.html", "/index.php"];
-
-            for (const suffix of suffixes) {
-                if (path.endsWith(suffix)) {
-                    return path.slice(0, -suffix.length);
-                }
-            }
-
-            if (path === "/") {
-                return "";
-            }
-
-            return path.endsWith("/") ? path.slice(0, -1) : path;
-        }
-
-        function userUrl(username) {
-            return API_BASE + "/user/" + encodeURIComponent(username);
-        }
-
-        function profileUrl() {
-            return API_BASE + "/profile";
-        }
-
-        function resolveMediaUrl(url) {
-            if (!url) {
-                return "";
-            }
-            if (url.startsWith("http://") || url.startsWith("https://")) {
-                return url;
-            }
-            return `${API_BASE}${url}`;
-        }
-
-        function resolveAdminUrl() {
-            return `${API_BASE}/admin`;
-        }
-
-        function syncAdminPanelButton() {
-            const link = document.getElementById("adminPanelLink");
-            link.href = resolveAdminUrl();
-            link.classList.toggle("hidden", !currentUser || currentUser.role !== "admin");
-        }
-
-        function createBubbles() {
-            const container = document.getElementById("oceanBg");
-            for (let i = 0; i < 15; i++) {
-                const bubble = document.createElement("div");
-                bubble.className = "bubble";
-                bubble.style.left = Math.random() * 100 + "%";
-                bubble.style.width = bubble.style.height = (Math.random() * 30 + 10) + "px";
-                bubble.style.animationDelay = Math.random() * 8 + "s";
-                bubble.style.animationDuration = (Math.random() * 5 + 6) + "s";
-                container.appendChild(bubble);
-            }
-        }
-
-        function createFish() {
-            const container = document.getElementById("oceanBg");
-            const emojis = ["🐠", "🐟", "🐡", "🦈", "🐋"];
-            for (let i = 0; i < 5; i++) {
-                const fish = document.createElement("div");
-                fish.className = "fish";
-                fish.textContent = emojis[Math.floor(Math.random() * emojis.length)];
-                fish.style.fontSize = (Math.random() * 30 + 20) + "px";
-                fish.style.top = (Math.random() * 60 + 10) + "%";
-                fish.style.animationDuration = (Math.random() * 15 + 15) + "s";
-                fish.style.animationDelay = Math.random() * 20 + "s";
-                container.appendChild(fish);
-            }
-        }
-
-        async function api(endpoint, options = {}) {
-            try {
-                const headers = { ...(options.headers || {}) };
-                if (options.body instanceof FormData) {
-                    delete headers["Content-Type"];
-                } else {
-                    headers["Content-Type"] = headers["Content-Type"] || "application/json";
-                }
-
-                const response = await fetch(`${API_BASE}/api${endpoint}`, {
-                    ...options,
-                    headers,
-                    credentials: "include"
-                });
-                const payload = await response.json();
-                if (payload && typeof payload === "object") {
-                    payload.status = response.status;
-                }
-
-                if (response.status === 403 && payload && payload.message === ACCESS_DENIED_MESSAGE) {
-                    if (currentUser) {
-                        currentUser.is_allowed = false;
-                        currentUser.access_message = payload.message;
-                    }
-                    applyLockedState(payload.message);
-                }
-
-                return payload;
-            } catch (error) {
-                console.error("API request failed", error);
-                return { success: false, message: "Ошибка сети" };
-            }
-        }
-
-        function showError(id, message) {
-            const element = document.getElementById(id);
-            element.textContent = message;
-            element.classList.remove("hidden");
-            setTimeout(() => element.classList.add("hidden"), 5000);
-        }
-
-        function showLogin() {
-            document.getElementById("loginForm").classList.remove("hidden");
-            document.getElementById("registerForm").classList.add("hidden");
-        }
-
-        function showRegister() {
-            document.getElementById("loginForm").classList.add("hidden");
-            document.getElementById("registerForm").classList.remove("hidden");
-        }
-
-        function applyLockedState(message) {
-            document.getElementById("appHeader").classList.add("hidden");
-            document.getElementById("appContent").classList.add("hidden");
-            document.getElementById("lockedState").classList.remove("hidden");
-            document.getElementById("lockedMessage").textContent = message || ACCESS_DENIED_MESSAGE;
-            document.getElementById("postsContainer").innerHTML = "";
-            document.getElementById("postSuccess").classList.add("hidden");
-            document.getElementById("postError").classList.add("hidden");
-            document.getElementById("postContent").value = "";
-            clearSelectedImage();
-            window.modalReplyToPostId = null;
-        }
-
-        function applyAllowedState() {
-            document.getElementById("appHeader").classList.remove("hidden");
-            document.getElementById("appContent").classList.remove("hidden");
-            document.getElementById("lockedState").classList.add("hidden");
-        }
-
-        function openImagePicker() {
-            document.getElementById("postImageInput").click();
-        }
-
-        function handleImageSelection(event) {
-            const input = event.target;
-            const file = input.files && input.files[0] ? input.files[0] : null;
-            const name = document.getElementById("selectedImageName");
-            const clearButton = document.getElementById("clearImageButton");
-
-            if (!file) {
-                name.textContent = "Без картинки";
-                clearButton.classList.add("hidden");
-                return;
-            }
-
-            name.textContent = file.name;
-            clearButton.classList.remove("hidden");
-        }
-
-        function clearSelectedImage() {
-            const input = document.getElementById("postImageInput");
-            input.value = "";
-            document.getElementById("selectedImageName").textContent = "Без картинки";
-            document.getElementById("clearImageButton").classList.add("hidden");
-        }
-
-        function openPostModal(post) {
-            const modal = document.getElementById("postModal");
-            const title = document.getElementById("modalTitle");
-            const replyBlock = document.getElementById("modalReplyBlock");
-
-            document.getElementById("modalPostContent").value = "";
-            document.getElementById("modalPostSuccess").classList.add("hidden");
-            document.getElementById("modalPostError").classList.add("hidden");
-            clearModalImage();
-
-            if (post && post.id) {
-                title.textContent = "Ответ";
-                document.getElementById("modalReplyUsername").textContent = "@" + post.username;
-                document.getElementById("modalReplyContent").textContent = truncateText(post.content, 20);
-                replyBlock.classList.remove("hidden");
-                window.modalReplyToPostId = post.id;
-            } else {
-                title.textContent = "Новый пост";
-                replyBlock.classList.add("hidden");
-                window.modalReplyToPostId = null;
-            }
-
-            modal.classList.add("active");
-            setTimeout(() => document.getElementById("modalPostContent").focus(), 100);
-        }
-
-        function closePostModal() {
-            document.getElementById("postModal").classList.remove("active");
-        }
-
-        function clearModalReply() {
-            const replyBlock = document.getElementById("modalReplyBlock");
-            replyBlock.classList.add("hidden");
-            window.modalReplyToPostId = null;
-            document.getElementById("modalTitle").textContent = "Новый пост";
-        }
-
-        function handleModalImageSelection(event) {
-            const input = event.target;
-            const file = input.files && input.files[0] ? input.files[0] : null;
-            const name = document.getElementById("modalSelectedImageName");
-            const clearButton = document.getElementById("modalClearImageButton");
-            const preview = document.getElementById("modalImagePreview");
-
-            if (!file) {
-                name.textContent = "Без картинки";
-                clearButton.classList.add("hidden");
-                preview.style.display = "none";
-                return;
-            }
-
-            name.textContent = file.name;
-            clearButton.classList.remove("hidden");
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                preview.src = e.target.result;
-                preview.style.display = "block";
-            };
-            reader.readAsDataURL(file);
-        }
-
-        function clearModalImage() {
-            const input = document.getElementById("modalPostImageInput");
-            input.value = "";
-            document.getElementById("modalSelectedImageName").textContent = "Без картинки";
-            document.getElementById("modalClearImageButton").classList.add("hidden");
-            document.getElementById("modalImagePreview").style.display = "none";
-        }
-
-        async function submitFromModal() {
-            if (!currentUser || !currentUser.is_allowed) {
-                applyLockedState(currentUser && currentUser.access_message);
-                return;
-            }
-
-            const content = document.getElementById("modalPostContent").value.trim();
-            const imageInput = document.getElementById("modalPostImageInput");
-            const imageFile = imageInput.files && imageInput.files[0] ? imageInput.files[0] : null;
-            const replyToPostId = window.modalReplyToPostId || null;
-
-            if (!content && !imageFile) {
-                showModalError("Добавьте текст или картинку");
-                return;
-            }
-
-            let response;
-            if (imageFile) {
-                const formData = new FormData();
-                formData.append("content", content);
-                formData.append("image", imageFile);
-                if (replyToPostId) {
-                    formData.append("parent_post_id", replyToPostId);
-                }
-                response = await api("/posts", {
-                    method: "POST",
-                    body: formData
-                });
-            } else {
-                const body = { content };
-                if (replyToPostId) {
-                    body.parent_post_id = replyToPostId;
-                }
-                response = await api("/posts", {
-                    method: "POST",
-                    body: JSON.stringify(body)
-                });
-            }
-
-            if (!response.success) {
-                showModalError(response.message);
-                return;
-            }
-
-            closePostModal();
-            window.modalReplyToPostId = null;
-            setTimeout(() => { window.location.reload(); }, 200);
-        }
-
-        function showModalError(message) {
-            const element = document.getElementById("modalPostError");
-            element.textContent = message;
-            element.classList.remove("hidden");
-            setTimeout(() => element.classList.add("hidden"), 5000);
-        }
-
-        function truncateText(text, maxLength) {
-            if (!text) return "";
-            if (text.length <= maxLength) return "\"" + text + "\"";
-            return "\"" + text.substring(0, maxLength) + "...\"";
-        }
-
-        function scrollToPostForm() {
-            const form = document.getElementById("postForm");
-            if (form) {
-                form.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-        }
-
-        function scrollToPost(postId) {
-            const postElement = document.getElementById("post-" + postId);
-            if (postElement) {
-                postElement.scrollIntoView({ behavior: "smooth", block: "center" });
-                postElement.style.outline = "3px solid #7fdbff";
-                setTimeout(() => {
-                    postElement.style.outline = "";
-                }, 2000);
-            }
-        }
-
-        async function login() {
-            const username = document.getElementById("loginUsername").value;
-            const password = document.getElementById("loginPassword").value;
-            const response = await api("/login", {
-                method: "POST",
-                body: JSON.stringify({ username, password })
-            });
-            if (response.success) {
-                checkAuth();
-                return;
-            }
-            showError("loginError", response.message);
-        }
-
-        async function register() {
-            const username = document.getElementById("regUsername").value;
-            const password = document.getElementById("regPassword").value;
-            const response = await api("/register", {
-                method: "POST",
-                body: JSON.stringify({ username, password })
-            });
-            if (response.success) {
-                checkAuth();
-                return;
-            }
-            showError("registerError", response.message);
-        }
-
-        async function logout() {
-            await api("/logout", { method: "POST" });
-            currentUser = null;
-            syncAdminPanelButton();
-            applyAllowedState();
-            document.getElementById("authContainer").classList.remove("hidden");
-            document.getElementById("appContainer").classList.add("hidden");
-            showLogin();
-        }
-
-        async function checkAuth() {
-            const response = await api("/me");
-            if (response.success) {
-                currentUser = response.data;
-                document.getElementById("username").textContent = currentUser.username;
-                syncAdminPanelButton();
-                document.getElementById("authContainer").classList.add("hidden");
-                document.getElementById("appContainer").classList.remove("hidden");
-                if (currentUser.is_allowed) {
-                    applyAllowedState();
-                    showFeed();
-                    return;
-                }
-
-                applyLockedState(currentUser.access_message);
-            }
-        }
-
-        async function createPost() {
-            if (!currentUser || !currentUser.is_allowed) {
-                applyLockedState(currentUser && currentUser.access_message);
-                return;
-            }
-
-            const content = document.getElementById("postContent").value.trim();
-            const imageInput = document.getElementById("postImageInput");
-            const imageFile = imageInput.files && imageInput.files[0] ? imageInput.files[0] : null;
-
-            if (!content && !imageFile) {
-                showError("postError", "Добавьте текст или картинку");
-                return;
-            }
-
-            let response;
-            if (imageFile) {
-                const formData = new FormData();
-                formData.append("content", content);
-                formData.append("image", imageFile);
-                if (replyToPostId) {
-                    formData.append("parent_post_id", replyToPostId);
-                }
-                response = await api("/posts", {
-                    method: "POST",
-                    body: formData
-                });
-            } else {
-                const body = { content };
-                if (replyToPostId) {
-                    body.parent_post_id = replyToPostId;
-                }
-                response = await api("/posts", {
-                    method: "POST",
-                    body: JSON.stringify(body)
-                });
-            }
-
-            if (!response.success) {
-                showError("postError", response.message);
-                return;
-            }
-
-            document.getElementById("postContent").value = "";
-            clearSelectedImage();
-            document.getElementById("postSuccess").textContent = "Пост опубликован!";
-            document.getElementById("postSuccess").classList.remove("hidden");
-            setTimeout(() => document.getElementById("postSuccess").classList.add("hidden"), 3000);
-            loadPosts();
-        }
-
-        async function loadPosts() {
-            if (!currentUser || !currentUser.is_allowed) {
-                applyLockedState(currentUser && currentUser.access_message);
-                return;
-            }
-
-            const response = await api("/feed");
-            const container = document.getElementById("postsContainer");
-
-            if (response.status === 403) {
-                return;
-            }
-
-            if (response.success && response.data && response.data.length > 0) {
-                window.postsCache = {};
-                response.data.forEach(post => { window.postsCache[post.id] = post; });
-                container.innerHTML = response.data.map(renderPost).join("");
-                updateImageCountdowns();
-                return;
-            }
-
-            container.innerHTML = '<div class="empty-state">Пока нет постов</div>';
-        }
-
-        function renderPost(post) {
-            const likedClass = post.liked ? " liked" : "";
-            const likedLabel = post.liked ? "Убрать лайк" : "Поставить лайк";
-            const displayName = post.name || post.username;
-            const avatar = post.avatar || '🐠';
-            const contentHtml = post.content ? '<div class="post-content">' + esc(post.content) + '</div>' : "";
-            const imageHtml = renderPostImage(post);
-            const parentHtml = renderParentPost(post);
-            const actionsHtml = '<div class="post-actions"><button class="like-btn' + likedClass + '" aria-label="' + likedLabel + '" onclick="likePost(' + post.id + ', this)">❤️ <span>' + post.likes + '</span></button><button class="reply-btn" aria-label="Ответить" onclick="replyToPost(' + post.id + ')">↩</button></div>';
-
-            return '<div class="post" id="post-' + post.id + '"><div class="post-header"><div class="post-author"><span class="post-author-avatar">' + esc(avatar) + '</span><a href="' + userUrl(post.username) + '" onclick="event.stopPropagation();">' + esc(displayName) + '</a></div><div class="post-date">' + fmt(post.created_at) + '</div></div>' + parentHtml + contentHtml + imageHtml + '<div class="post-footer">' + actionsHtml + '</div></div>';
-        }
-
-        function renderParentPost(post) {
-            if (!post.parent_post || !post.parent_post.id) {
-                return "";
-            }
-            const parent = post.parent_post;
-            const parentName = parent.name || parent.username;
-            const parentAvatar = parent.avatar || '🐠';
-            return '<div class="post-parent" onclick="scrollToPost(' + parent.id + ')" style="cursor:pointer;"><span class="post-author-avatar">' + esc(parentAvatar) + '</span> ↩ Ответ на: <a href="' + userUrl(parent.username) + '" onclick="event.stopPropagation();"><strong>@' + esc(parent.username) + '</strong></a> — ' + esc(truncateText(parent.content, 20)) + '</div>';
-        }
-
-        function renderPostImage(post) {
-            if (!post.image_url || !post.image_expires_at) {
-                return "";
-            }
-
-            return '<div class="post-image" data-expires-at="' + esc(post.image_expires_at) + '"><img src="' + esc(resolveMediaUrl(post.image_url)) + '" alt="Картинка к посту"><div class="image-timer"></div></div>';
-        }
-
-        function updateImageCountdowns() {
-            const imageNodes = document.querySelectorAll(".post-image[data-expires-at]");
-            imageNodes.forEach((node) => {
-                const expiresAt = Date.parse(node.dataset.expiresAt || "");
-                if (!Number.isFinite(expiresAt)) {
-                    node.remove();
-                    return;
-                }
-
-                const remaining = expiresAt - Date.now();
-                if (remaining <= 0) {
-                    node.remove();
-                    return;
-                }
-
-                const timer = node.querySelector(".image-timer");
-                if (timer) {
-                    timer.textContent = formatCountdown(remaining);
-                }
-            });
-        }
-
-        function formatCountdown(milliseconds) {
-            const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = totalSeconds % 60;
-
-            return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
-        }
-
-        async function likePost(id, button) {
-            if (!currentUser || !currentUser.is_allowed) {
-                applyLockedState(currentUser && currentUser.access_message);
-                return;
-            }
-
-            if (button) {
-                button.disabled = true;
-            }
-
-            const response = await api("/like", {
-                method: "POST",
-                body: JSON.stringify({ post_id: Number(id) })
-            });
-
-            if (response.success && button) {
-                const count = button.querySelector("span");
-                count.textContent = response.data.likes;
-                button.classList.toggle("liked", Boolean(response.data.liked));
-                button.setAttribute("aria-label", response.data.liked ? "Убрать лайк" : "Поставить лайк");
-            }
-
-            if (response.status === 403) {
-                if (button) {
-                    button.disabled = false;
-                }
-                return;
-            }
-
-            if (button) {
-                button.disabled = false;
-            }
-        }
-
-        function replyToPost(postId) {
-            if (!currentUser || !currentUser.is_allowed) {
-                applyLockedState(currentUser && currentUser.access_message);
-                return;
-            }
-
-            const postData = window.postsCache && window.postsCache[postId];
-            if (postData) {
-                openPostModal(postData);
-            }
-        }
-
-        window.postsCache = {};
-
-        function showFeed() {
-            if (!currentUser || !currentUser.is_allowed) {
-                applyLockedState(currentUser && currentUser.access_message);
-                return;
-            }
-            loadPosts();
-        }
-
-        function esc(text) {
-            const div = document.createElement("div");
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        function fmt(dateValue) {
-            return new Date(dateValue).toLocaleDateString("ru-RU", {
-                day: "numeric",
-                month: "long",
-                hour: "2-digit",
-                minute: "2-digit"
-            });
-        }
-
-        createBubbles();
-        createFish();
-        document.getElementById("profileLink").href = profileUrl();
-        checkAuth();
-        window.setInterval(updateImageCountdowns, 1000);
+        window.__loadKuzovokScripts__(["shared.js", "index.js"]);
     </script>
 </body>
 </html>
